@@ -39,65 +39,32 @@ def load_data(file):
    return df
 
 def create_age_chart(df, cargo_filter=None):
-    # Criar uma cópia do DataFrame para evitar os warnings
-    df = df.copy()
-    
-    # Aplicar filtro de cargo se existir
-    if cargo_filter:
-        df = df[df[cargo_column] == cargo_filter]
-        
-    # Criar faixas etárias com os intervalos corretos
-    bins = [17, 23, 28, 33, 38, 43, 48, 53, 58, 63]
-    labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
-    
-    # Converter idade para numérico e criar faixas
-    df[idade_column] = pd.to_numeric(df[idade_column], errors='coerce')
-    df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=False)
-    
-    # Contar frequência por faixa etária e ordenar
-    idade_counts = pd.DataFrame(df['faixa_etaria'].value_counts()).reset_index()
-    idade_counts.columns = ['faixa_etaria', 'quantidade']
-    
-    # Garantir que todas as faixas etárias estejam presentes
-    todas_faixas = pd.DataFrame({'faixa_etaria': labels})
-    idade_counts = todas_faixas.merge(idade_counts, on='faixa_etaria', how='left').fillna(0)
-    
-    # Criar gráfico
-    fig = px.bar(
-        data_frame=idade_counts,
-        x='faixa_etaria',
-        y='quantidade',
-        labels={'faixa_etaria': 'Faixa Etária', 'quantidade': 'Quantidade'},
-        title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
-    )
-    
-    # Configurar aparência
-    fig.update_traces(
-        marker_color='red',
-        hovertemplate="Faixa: %{x}<br>Quantidade: %{y}<extra></extra>"
-    )
-    
-    # Configurar layout
-    fig.update_layout(
-        showlegend=False,
-        xaxis_tickangle=0,
-        plot_bgcolor='white',
-        yaxis_gridcolor='lightgray',
-        yaxis=dict(
-            gridcolor='lightgrey',
-            gridwidth=1,
-            autorange=True,
-            tickformat=',d'
-        ),
-        xaxis=dict(
-            tickmode='array',
-            ticktext=labels,
-            tickvals=labels,
-            title='Faixa Etária'
-        )
-    )
-    
-    return fig
+   # Aplicar filtro de cargo se existir
+   if cargo_filter:
+       df = df[df[cargo_column] == cargo_filter]
+       
+   bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
+   labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
+   df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=True)
+   idade_counts = df['faixa_etaria'].value_counts().sort_index()
+   
+   fig = px.bar(
+       x=idade_counts.index,
+       y=idade_counts.values,
+       labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
+       title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
+   )
+   fig.update_traces(
+       marker_color='red',
+       hovertemplate="Faixa: %{x}<br>Quantidade: %{y}<extra></extra>"
+   )
+   fig.update_layout(
+       showlegend=False,
+       xaxis_tickangle=0,
+       plot_bgcolor='white',
+       yaxis_gridcolor='lightgray'
+   )
+   return fig
 
 def create_cargo_chart(df, cargo_filter=None):
    if cargo_filter:
