@@ -18,7 +18,7 @@ def load_data(file):
 def create_age_chart(df, cargo_filter=None):
     # Aplicar filtro de cargo se existir
     if cargo_filter:
-        df = df[df[cargo_column].isin(cargo_filter)]
+        df = df[df[cargo_column] == cargo_filter]
         
     # Criar faixas etárias
     bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
@@ -30,7 +30,7 @@ def create_age_chart(df, cargo_filter=None):
         x=idade_counts.index,
         y=idade_counts.values,
         labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
-        title=f"Distribuição por Idade{' - ' + ', '.join(cargo_filter) if cargo_filter else ''}"
+        title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
     )
     fig.update_traces(marker_color='red')
     fig.update_layout(
@@ -41,21 +41,23 @@ def create_age_chart(df, cargo_filter=None):
     )
     return fig
 
-def create_cargo_chart(df, idade_filter=None):
-    # Aplicar filtro de idade se existir
-    if idade_filter:
-        df = df[df['faixa_etaria'].isin(idade_filter)]
-        
+def create_cargo_chart(df, cargo_filter=None):
     cargo_counts = df[cargo_column].value_counts()
+    
+    # Se houver filtro, destacar a barra selecionada
+    colors = ['gold'] * len(cargo_counts)
+    if cargo_filter:
+        colors = ['gold' if cargo != cargo_filter else 'darkgold' 
+                 for cargo in cargo_counts.index]
     
     fig = px.bar(
         x=cargo_counts.values,
         y=cargo_counts.index,
         orientation='h',
         labels={'x': 'Quantidade', 'y': 'Posto/Graduação'},
-        title=f"Distribuição por Posto/Graduação{' - ' + ', '.join(idade_filter) if idade_filter else ''}"
+        title="Distribuição por Posto/Graduação"
     )
-    fig.update_traces(marker_color='gold')
+    fig.update_traces(marker_color=colors)
     fig.update_layout(
         showlegend=False,
         plot_bgcolor='white',
@@ -81,65 +83,58 @@ def main():
         # Converter idade para numérico
         df[idade_column] = pd.to_numeric(df[idade_column], errors='coerce')
 
-        # Inicializar filtros na session state
-        if 'cargo_filter' not in st.session_state:
-            st.session_state.cargo_filter = []
-        if 'idade_filter' not in st.session_state:
-            st.session_state.idade_filter = []
+        # Criar botões para cada posto/graduação
+        st.write("Filtrar por Posto/Graduação:")
+        col_buttons = st.columns(4)  # Ajuste o número de colunas conforme necessário
+        
+        # Adicionar botão "Todos"
+        if col_buttons[0].button("Todos", use_container_width=True):
+            st.session_state.cargo_selecionado = None
+        
+        # Obter lista única de cargos ordenada
+        cargos = sorted(df[cargo_column].unique())
+        
+        # Inicializar estado do cargo selecionado se não existir
+        if 'cargo_selecionado' not in st.session_state:
+            st.session_state.cargo_selecionado = None
+            
+        # Criar botões para cada cargo
+        for i, cargo in enumerate(cargos, 1):  # começar do 1 pois 0 é o botão "Todos"
+            col_index = i % 4  # para distribuir em 4 colunas
+            if col_buttons[col_index].button(cargo, use_container_width=True):
+                if st.session_state.cargo_selecionado == cargo:
+                    st.session_state.cargo_selecionado = None
+                else:
+                    st.session_state.cargo_selecionado = cargo
 
-        # Mostrar efetivo total
+        # Mostrar efetivo total e filtrado
         total_registros = len(df)
-        st.header(f"Efetivo Total: {total_registros:,}")
+        if st.session_state.cargo_selecionado:
+            df_filtered = df[df[cargo_column] == st.session_state.cargo_selecionado]
+            st.header(f"Efetivo Filtrado: {len(df_filtered):,} de {total_registros:,}")
+        else:
+            df_filtered = df
+            st.header(f"Efetivo Total: {total_registros:,}")
 
         # Criar colunas para os gráficos
         col1, col2 = st.columns(2)
 
         with col1:
             # Gráfico de idade
-            fig_idade = create_age_chart(df, st.session_state.cargo_filter)
-            selected_idade = st.plotly_chart(fig_idade, use_container_width=True)
-            
-            # Adicionar multiselect para faixas etárias
-            if not st.session_state.idade_filter:
-                st.caption("Clique nas barras do gráfico acima para filtrar por faixa etária")
-            else:
-                st.caption(f"Filtros ativos: {', '.join(st.session_state.idade_filter)}")
-                if st.button("Limpar filtros de idade"):
-                    st.session_state.idade_filter = []
-                    st.experimental_rerun()
+            fig_idade = create_age_chart(df, st.session_state.cargo_selecionado)
+            st.plotly_chart(fig_idade, use_container_width=True)
 
         with col2:
             # Gráfico de cargo
-            fig_cargo = create_cargo_chart(df, st.session_state.idade_filter)
-            selected_cargo = st.plotly_chart(fig_cargo, use_container_width=True)
-            
-            # Adicionar multiselect para cargos
-            if not st.session_state.cargo_filter:
-                st.caption("Clique nas barras do gráfico acima para filtrar por cargo")
-            else:
-                st.caption(f"Filtros ativos: {', '.join(st.session_state.cargo_filter)}")
-                if st.button("Limpar filtros de cargo"):
-                    st.session_state.cargo_filter = []
-                    st.experimental_rerun()
+            fig_cargo = create_cargo_chart(df, st.session_state.cargo_selecionado)
+            st.plotly_chart(fig_cargo, use_container_width=True)
 
         # Dados Detalhados
         st.subheader("Dados Detalhados")
         
-        # Aplicar filtros
-        df_filtered = df.copy()
-        if st.session_state.cargo_filter:
-            df_filtered = df_filtered[df_filtered[cargo_column].isin(st.session_state.cargo_filter)]
-        if st.session_state.idade_filter:
-            df_filtered = df_filtered[df_filtered['faixa_etaria'].isin(st.session_state.idade_filter)]
-
         # Ordenar por nome
         df_filtered = df_filtered.sort_values(nome_column)
         
-        # Mostrar quantidade de registros filtrados
-        registros_filtrados = len(df_filtered)
-        if registros_filtrados != total_registros:
-            st.write(f"Mostrando {registros_filtrados:,} de {total_registros:,} registros")
-
         # Mostrar dados com paginação
         st.dataframe(
             df_filtered,
