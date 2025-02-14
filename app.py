@@ -92,7 +92,7 @@ def main():
             st.session_state.cargo_selecionado = None
         
         # Obter lista única de cargos ordenada
-        cargos = sorted(df[cargo_column].unique())
+        cargos = sorted(df[cargo_column].astype(str).unique())
         
         # Inicializar estado do cargo selecionado se não existir
         if 'cargo_selecionado' not in st.session_state:
