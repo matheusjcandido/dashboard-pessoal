@@ -98,7 +98,6 @@ def load_data(file):
                 st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
             if null_dates_inicio > 0:
                 st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
-        
         except Exception as e:
             st.error(f"Erro ao processar datas: {str(e)}")
             print("Erro detalhado ao processar datas:", e)
@@ -110,11 +109,11 @@ def load_data(file):
         st.error(f"Erro ao carregar os dados: {str(e)}")
         return None
                 
-        return df
-    except Exception as e:
-        st.error(f"Erro ao processar datas: {str(e)}")
-        print("Erro detalhado ao processar datas:", e)
-        return None
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
         
         return df
     except Exception as e:
@@ -257,7 +256,7 @@ def main():
     
     st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
     
-    uploaded_file = st.file_uploader("Upload de Dados", type="csv")
+    uploaded_file = st.file_uploader("Upload de Dados", type="csv", key="upload_csv")
     
     if uploaded_file is not None:
         df = load_data(uploaded_file)
@@ -382,9 +381,6 @@ def main():
                 file_name=f"dados_bombeiros_filtrados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
