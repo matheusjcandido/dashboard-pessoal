@@ -71,7 +71,7 @@ def clean_date(date_str):
 def load_data(file):
     try:
         # Lê o arquivo pulando as linhas de cabeçalho desnecessárias (6 linhas)
-        df = pd.read_csv(file, encoding='cp1252', skiprows=7, header=0)
+        df = pd.read_csv(file, encoding='cp1252', skiprows=6, header=0)
         
         # Remove linhas totalmente vazias
         df = df.dropna(how='all')
@@ -97,24 +97,9 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=['Idade'])
         
-        try:
-            # Processa as datas, removendo espaços extras primeiro
-            df['Data Nascimento'] = df['Data Nascimento'].str.strip().apply(clean_date)
-            df['Data Início'] = df['Data Início'].str.strip().apply(clean_date)
-            
-            # Verifica datas nulas
-            null_dates_nasc = df['Data Nascimento'].isnull().sum()
-            null_dates_inicio = df['Data Início'].isnull().sum()
-            
-            if null_dates_nasc > 0:
-                st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
-            if null_dates_inicio > 0:
-                st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
-                
-        except Exception as e:
-            st.error(f"Erro ao processar datas: {str(e)}")
-            print("Erro detalhado ao processar datas:", e)
-            return None
+        # Apenas remove espaços extras das datas, mantendo como texto
+        df['Data Nascimento'] = df['Data Nascimento'].str.strip()
+        df['Data Início'] = df['Data Início'].str.strip()
         
         return df
         
@@ -123,11 +108,11 @@ def load_data(file):
         print("Erro detalhado ao carregar dados:", e)
         return None
                 
-        return df
-    except Exception as e:
-        st.error(f"Erro ao processar datas: {str(e)}")
-        print("Erro detalhado ao processar datas:", e)
-        return None
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
         
         return df
     except Exception as e:
