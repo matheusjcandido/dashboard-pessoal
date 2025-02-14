@@ -52,7 +52,7 @@ def load_data(file):
         df.columns = df.columns.str.strip()
         
         # Identifica a coluna de idade
-        idade_col = [col for col in df.columns if 'IDADE' in col.upper()][0]
+        idade_col = [col for col in df.columns if 'Idade' in col.upper()][0]
         
         # Converte a coluna de idade para numérico, tratando erros
         df[idade_col] = pd.to_numeric(df[idade_col], errors='coerce')
@@ -194,7 +194,7 @@ def main():
         
         if df is not None:
             # Identificar colunas importantes
-            idade_column = [col for col in df.columns if 'IDADE' in col.upper()][0]
+            idade_column = [col for col in df.columns if 'Idade' in col.upper()][0]
             cargo_column = [col for col in df.columns if 'CARGO' in col.upper()][0]
             nome_column = [col for col in df.columns if 'NOME' in col.upper()][0]
             
