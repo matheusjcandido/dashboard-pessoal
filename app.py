@@ -15,7 +15,7 @@ except ImportError:
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard Bombeiros PR",
+    page_title="Dashboard CBMPR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -188,16 +188,13 @@ def create_summary_metrics(df, cargo_column, idade_column):
     try:
         total_efetivo = len(df)
         idade_media = df[idade_column].mean()
-        total_cargos = df[cargo_column].nunique()
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
             st.metric("Total de Efetivo", f"{total_efetivo:,}".replace(",", "."))
         with col2:
             st.metric("Idade Média", f"{idade_media:.1f} anos")
-        with col3:
-            st.metric("Total de Postos/Graduações", total_cargos)
             
     except Exception as e:
         st.error(f"Erro ao criar métricas resumidas: {str(e)}")
@@ -217,7 +214,7 @@ def main():
         </style>
     """, unsafe_allow_html=True)
     
-    st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
+    st.title("Dashboard - Efetivo")
     
     uploaded_file = st.file_uploader("Upload de Dados", type="csv")
     
