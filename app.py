@@ -15,7 +15,7 @@ except ImportError:
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard CBMPR",
+    page_title="Dashboard Bombeiros PR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -214,7 +214,7 @@ def main():
         </style>
     """, unsafe_allow_html=True)
     
-    st.title("Dashboard - Efetivo")
+    st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
     
     uploaded_file = st.file_uploader("Upload de Dados", type="csv")
     
