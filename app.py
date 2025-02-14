@@ -5,14 +5,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_plotly_events import plotly_events
 
-# Importações para visualização
-try:
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    SEABORN_AVAILABLE = True
-except ImportError:
-    SEABORN_AVAILABLE = False
-
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard Bombeiros PR",
@@ -71,10 +63,30 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=[idade_col])
         
+        # Formata as datas
+        df['Data Nascimento'] = pd.to_datetime(df['Data Nascimento'].str.strip(), format='%d/%m/%Y', errors='coerce')
+        df['Data Início'] = pd.to_datetime(df['Data Início'], format='%d/%m/%Y', errors='coerce')
+        
         return df
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
         return None
+
+def format_date(date):
+    """Formata data para exibição no formato dd/mm/yyyy"""
+    try:
+        return date.strftime('%d/%m/%Y')
+    except:
+        return ''
+
+def format_cpf(cpf):
+    """Formata CPF para exibição no formato ###.###.###-##"""
+    try:
+        if isinstance(cpf, str) and len(cpf) == 11:
+            return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
+        return cpf
+    except:
+        return cpf
 
 def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
     try:
@@ -104,7 +116,7 @@ def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
             x=list(idade_counts.index),
             y=idade_counts.values,
             marker_color='red',
-            text=idade_counts.values,  # Adiciona os valores sobre as barras
+            text=idade_counts.values,
             textposition='auto',
         ))
         
@@ -115,29 +127,6 @@ def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
             showlegend=False,
             xaxis_tickangle=45,
             plot_bgcolor='white',
-            height=400,
-            margin=dict(t=50, b=50)
-        )
-        
-        return fig
-        
-        fig = px.bar(
-            x=idade_counts.index,
-            y=idade_counts.values,
-            labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
-            title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
-        )
-        
-        fig.update_traces(
-            marker_color='red',
-            hovertemplate="Faixa: %{x}<br>Quantidade: %{y}<extra></extra>"
-        )
-        
-        fig.update_layout(
-            showlegend=False,
-            xaxis_tickangle=45,
-            plot_bgcolor='white',
-            yaxis_gridcolor='lightgray',
             height=400,
             margin=dict(t=50, b=50)
         )
@@ -210,6 +199,9 @@ def main():
             width: 100%;
             font-size: 0.8rem;
             padding: 0.3rem;
+        }
+        .stDataFrame {
+            font-size: 0.8rem;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -302,16 +294,40 @@ def main():
                     df_filtered[nome_column].str.contains(search_term, case=False, na=False)
                 ]
             
-            df_filtered = df_filtered.sort_values(nome_column)
+            # Selecionar apenas as colunas desejadas
+            colunas_mostrar = [
+                nome_column,           # coluna 2
+                'CPF',                # coluna 4
+                'Data Nascimento',    # coluna 5
+                idade_column,         # coluna 6
+                'Código da Unidade de Trabalho',  # coluna 8
+                'Descrição da Unidade de Trabalho',  # coluna 9
+                cargo_column,         # coluna 10
+                'Data Início',        # coluna 13
+                'Recebe Abono Permanência',  # coluna 16
+                'UF-Cidade'          # coluna 22
+            ]
             
+            # Preparar dados para exibição
+            df_display = df_filtered[colunas_mostrar].copy()
+            
+            # Formatar as colunas
+            df_display['CPF'] = df_display['CPF'].apply(format_cpf)
+            df_display['Data Nascimento'] = df_display['Data Nascimento'].apply(format_date)
+            df_display['Data Início'] = df_display['Data Início'].apply(format_date)
+            
+            # Ordenar por nome
+            df_display = df_display.sort_values(nome_column)
+            
+            # Exibir dataframe
             st.dataframe(
-                df_filtered,
+                df_display,
                 use_container_width=True,
                 height=400
             )
             
             # Botão de download
-            csv = df_filtered.to_csv(index=False).encode('utf-8')
+            csv = df_display.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="Download dos dados filtrados",
                 data=csv,
