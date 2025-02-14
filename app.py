@@ -7,7 +7,7 @@ from streamlit_plotly_events import plotly_events
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard Bombeiros PR",
+    page_title="Dashboard CBMPR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -99,6 +99,22 @@ def load_data(file):
                 st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
             if null_dates_inicio > 0:
                 st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
+                
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
+            
+    except Exception as e:
+        st.error(f"Erro ao carregar os dados: {str(e)}")
+        return None
+                
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
         
         return df
     except Exception as e:
@@ -338,7 +354,7 @@ def main():
                 cargo_column,         # coluna 10
                 'Data Início',        # coluna 13
                 'Recebe Abono Permanência',  # coluna 16
-                #'UF-Cidade'          # coluna 22
+              
             ]
             
             # Preparar dados para exibição
