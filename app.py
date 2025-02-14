@@ -85,13 +85,12 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=[idade_col])
         
-        # Trata as datas com a nova função de limpeza
         try:
-            # Primeiro, vamos verificar o formato das datas
+            # Processa as datas
             df['Data Nascimento'] = df['Data Nascimento'].apply(clean_date)
             df['Data Início'] = df['Data Início'].apply(clean_date)
             
-            # Verifica datas nulas após a conversão
+            # Verifica datas nulas
             null_dates_nasc = df['Data Nascimento'].isnull().sum()
             null_dates_inicio = df['Data Início'].isnull().sum()
             
@@ -99,14 +98,14 @@ def load_data(file):
                 st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
             if null_dates_inicio > 0:
                 st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
-            
-            return df
-            
+        
         except Exception as e:
             st.error(f"Erro ao processar datas: {str(e)}")
             print("Erro detalhado ao processar datas:", e)
             return None
-            
+        
+        return df
+        
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
         return None
@@ -383,6 +382,9 @@ def main():
                 file_name=f"dados_bombeiros_filtrados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
