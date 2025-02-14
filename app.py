@@ -52,7 +52,7 @@ def create_age_chart(df, cargo_filter=None):
    df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=False)
    
    # Contar frequência por faixa etária e ordenar
-   idade_counts = df['faixa_etaria'].value_counts()
+   idade_counts = df['faixa_etaria'].value_counts().reindex(labels).fillna(0)
 
    # Criar  dataframe para o gráfico
    df_plot = pd.DataFrame({
