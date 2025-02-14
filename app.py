@@ -72,7 +72,7 @@ def load_data(file):
     try:
         # Primeiro, vamos tentar ler o arquivo usando um parser mais robusto
         df = pd.read_csv(file, encoding='cp1252', 
-                         skiprows=5,  # Pula o cabeçalho inicial
+                         skiprows=7,  # Pula o cabeçalho inicial
                          header=0,    # Primeira linha como cabeçalho
                          sep=',',     # Especifica o separador
                          on_bad_lines='skip',  # Pula linhas problemáticas
