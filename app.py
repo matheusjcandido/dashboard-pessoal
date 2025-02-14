@@ -53,12 +53,18 @@ def create_age_chart(df, cargo_filter=None):
    
    # Contar frequência por faixa etária e ordenar
    idade_counts = df['faixa_etaria'].value_counts().sort_index()
+
+   # Criar  dataframe para o gráfico
+   df_plot = pd.DataFrame({
+      'faixa_etaria': idade_counts.index,
+      'quantidade': idade_counts.values
+   })
    
    # Criar gráfico
    fig = px.bar(
-       x=idade_counts.index,
-       y=idade_counts.values,
-       labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
+       x='faixa_etaria',
+       y='quantidade',
+       labels={'faixa_etaria': 'Faixa Etária', 'quantidade': 'Quantidade'},
        title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
    )
    
@@ -77,12 +83,14 @@ def create_age_chart(df, cargo_filter=None):
        yaxis=dict(
            gridcolor='lightgrey',
            gridwidth=1,
-           dtick=100
+           autorange=True,
+           tickformat=',d'
        ),
        xaxis=dict(
            tickmode='array',
            ticktext=labels,
-           tickvals=labels
+           tickvals=labels,
+           title='Faixa Etária'
        )
    )
    
