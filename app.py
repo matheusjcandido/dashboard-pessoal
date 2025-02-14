@@ -8,6 +8,29 @@ from streamlit_plotly_events import plotly_events
 # Configuração da página
 st.set_page_config(page_title="Dashboard Bombeiros PR", page_icon="🚒", layout="wide")
 
+# Ordem específica dos postos/graduações
+ORDEM_CARGOS = [
+    "Todos",
+    "Soldado 2ª Classe",
+    "Soldado 1ª Classe",
+    "Cabo",
+    "3º Sargento",
+    "2º Sargento",
+    "1º Sargento",
+    "Subtenente",
+    "Aluno de 1º Ano",
+    "Aluno de 2º Ano",
+    "Aluno de 3º Ano",
+    "Aspirante a Oficial",
+    "2º Tenente",
+    "2º Tenente 6",
+    "1º Tenente",
+    "Capitão",
+    "Major",
+    "Tenente Coronel",
+    "Coronel"
+]
+
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file, encoding='cp1252', skiprows=7, header=0, skip_blank_lines=True)
@@ -20,7 +43,6 @@ def create_age_chart(df, cargo_filter=None):
     if cargo_filter:
         df = df[df[cargo_column] == cargo_filter]
         
-    # Criar faixas etárias
     bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
     labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
     df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=True)
@@ -42,13 +64,10 @@ def create_age_chart(df, cargo_filter=None):
     return fig
 
 def create_cargo_chart(df, cargo_filter=None):
-    cargo_counts = df[cargo_column].value_counts()
-    
-    # Se houver filtro, destacar a barra selecionada
-    colors = ['gold'] * len(cargo_counts)
     if cargo_filter:
-        colors = ['gold' if cargo != cargo_filter else 'darkgold' 
-                 for cargo in cargo_counts.index]
+        df = df[df[cargo_column] == cargo_filter]
+        
+    cargo_counts = df[cargo_column].value_counts()
     
     fig = px.bar(
         x=cargo_counts.values,
@@ -57,7 +76,7 @@ def create_cargo_chart(df, cargo_filter=None):
         labels={'x': 'Quantidade', 'y': 'Posto/Graduação'},
         title="Distribuição por Posto/Graduação"
     )
-    fig.update_traces(marker_color=colors)
+    fig.update_traces(marker_color='gold')
     fig.update_layout(
         showlegend=False,
         plot_bgcolor='white',
@@ -71,78 +90,69 @@ def main():
     uploaded_file = st.file_uploader("Upload de Dados", type="csv")
 
     if uploaded_file is not None:
-        # Carregar dados
         df = load_data(uploaded_file)
         
-        # Encontrar colunas necessárias
         global idade_column, cargo_column, nome_column
         idade_column = [col for col in df.columns if 'IDADE' in col.upper()][0]
         cargo_column = [col for col in df.columns if 'CARGO' in col.upper()][0]
         nome_column = [col for col in df.columns if 'NOME' in col.upper()][0]
         
-        # Converter idade para numérico
         df[idade_column] = pd.to_numeric(df[idade_column], errors='coerce')
 
-        # Criar botões para cada posto/graduação
+        # Criar container para os botões com largura menor
         st.write("Filtrar por Posto/Graduação:")
-        col_buttons = st.columns(4)  # Ajuste o número de colunas conforme necessário
+        button_container = st.container()
         
-        # Adicionar botão "Todos"
-        if col_buttons[0].button("Todos", use_container_width=True):
-            st.session_state.cargo_selecionado = None
+        # Criar 4 colunas para os botões
+        cols = st.columns(6)
         
-        # Obter lista única de cargos ordenada
-        cargos = sorted(df[cargo_column].astype(str).unique())
-        
-        # Inicializar estado do cargo selecionado se não existir
+        # Inicializar estado
         if 'cargo_selecionado' not in st.session_state:
             st.session_state.cargo_selecionado = None
-            
-        # Criar botões para cada cargo
-        for i, cargo in enumerate(cargos, 1):  # começar do 1 pois 0 é o botão "Todos"
-            col_index = i % 4  # para distribuir em 4 colunas
-            if col_buttons[col_index].button(cargo, use_container_width=True):
-                if st.session_state.cargo_selecionado == cargo:
-                    st.session_state.cargo_selecionado = None
-                else:
-                    st.session_state.cargo_selecionado = cargo
 
-        # Mostrar efetivo total e filtrado
-        total_registros = len(df)
+        # Criar botões na ordem específica
+        for i, cargo in enumerate(ORDEM_CARGOS):
+            col_idx = i % 6
+            if cargo == "Todos":
+                if cols[col_idx].button("Todos", key="btn_todos", use_container_width=True):
+                    st.session_state.cargo_selecionado = None
+            elif cargo in df[cargo_column].unique():
+                if cols[col_idx].button(cargo, key=f"btn_{i}", use_container_width=True):
+                    if st.session_state.cargo_selecionado == cargo:
+                        st.session_state.cargo_selecionado = None
+                    else:
+                        st.session_state.cargo_selecionado = cargo
+
+        # Filtrar DataFrame
         if st.session_state.cargo_selecionado:
             df_filtered = df[df[cargo_column] == st.session_state.cargo_selecionado]
-            st.header(f"Efetivo Filtrado: {len(df_filtered):,} de {total_registros:,}")
+            st.header(f"Efetivo Filtrado: {len(df_filtered):,} de {len(df):,}")
         else:
             df_filtered = df
-            st.header(f"Efetivo Total: {total_registros:,}")
+            st.header(f"Efetivo Total: {len(df):,}")
 
-        # Criar colunas para os gráficos
         col1, col2 = st.columns(2)
 
         with col1:
-            # Gráfico de idade
-            fig_idade = create_age_chart(df, st.session_state.cargo_selecionado)
+            fig_idade = create_age_chart(df_filtered)
             st.plotly_chart(fig_idade, use_container_width=True)
 
         with col2:
-            # Gráfico de cargo
-            fig_cargo = create_cargo_chart(df, st.session_state.cargo_selecionado)
+            fig_cargo = create_cargo_chart(df_filtered)
             st.plotly_chart(fig_cargo, use_container_width=True)
 
         # Dados Detalhados
         st.subheader("Dados Detalhados")
         
-        # Ordenar por nome
         df_filtered = df_filtered.sort_values(nome_column)
         
-        # Mostrar dados com paginação
         st.dataframe(
             df_filtered,
             use_container_width=True,
             height=400
         )
 
-        # Botão de download dos dados filtrados
+        # Botão de download
         csv = df_filtered.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Download dos dados filtrados",
