@@ -70,8 +70,8 @@ def clean_date(date_str):
 @st.cache_data
 def load_data(file):
     try:
-        # Lê o arquivo pulando as linhas de cabeçalho desnecessárias
-        df = pd.read_csv(file, encoding='cp1252', skiprows=7, header=0)
+        # Lê o arquivo pulando as linhas de cabeçalho desnecessárias (6 linhas)
+        df = pd.read_csv(file, encoding='cp1252', skiprows=6, header=0)
         
         # Remove linhas totalmente vazias
         df = df.dropna(how='all')
@@ -82,43 +82,29 @@ def load_data(file):
         # Limpa os nomes das colunas
         df.columns = df.columns.str.strip()
         
-        # Identifica a coluna de idade
-        idade_col = [col for col in df.columns if 'IDADE' in col.upper()][0]
+        # Garantir que as colunas necessárias existem
+        required_columns = ['Data Nascimento', 'Data Início', 'Idade']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise Exception(f"Colunas não encontradas: {', '.join(missing_columns)}")
         
         # Converte a coluna de idade para numérico, tratando erros
-        df[idade_col] = pd.to_numeric(df[idade_col], errors='coerce')
+        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
         
         # Remove linhas com idades inválidas ou fora do intervalo esperado
-        df = df[df[idade_col].between(18, 62)]
+        df = df[df['Idade'].between(18, 62)]
         
         # Garante que não há valores nulos na coluna de idade
-        df = df.dropna(subset=[idade_col])
-        
-        # Imprime as primeiras linhas para debug
-        print("Primeiras linhas do DataFrame:")
-        print(df.head())
-        print("\nColunas disponíveis:", df.columns.tolist())
+        df = df.dropna(subset=['Idade'])
         
         try:
-            # Verifica se a coluna existe
-            if 'Data Nascimento' not in df.columns:
-                print("Colunas disponíveis:", df.columns.tolist())
-                raise Exception("Coluna 'Data Nascimento' não encontrada no DataFrame")
-            
-            # Mostra alguns valores da coluna para debug
-            print("\nAmostras de Data Nascimento antes da conversão:")
-            print(df['Data Nascimento'].head())
-            
-            # Processa as datas
-            df['Data Nascimento'] = df['Data Nascimento'].apply(clean_date)
-            df['Data Início'] = df['Data Início'].apply(clean_date)
+            # Processa as datas, removendo espaços extras primeiro
+            df['Data Nascimento'] = df['Data Nascimento'].str.strip().apply(clean_date)
+            df['Data Início'] = df['Data Início'].str.strip().apply(clean_date)
             
             # Verifica datas nulas
             null_dates_nasc = df['Data Nascimento'].isnull().sum()
             null_dates_inicio = df['Data Início'].isnull().sum()
-            
-            print("\nDatas após conversão:")
-            print(df[['Data Nascimento', 'Data Início']].head())
             
             if null_dates_nasc > 0:
                 st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
@@ -137,11 +123,11 @@ def load_data(file):
         print("Erro detalhado ao carregar dados:", e)
         return None
                 
-        return df
-    except Exception as e:
-        st.error(f"Erro ao processar datas: {str(e)}")
-        print("Erro detalhado ao processar datas:", e)
-        return None
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
         
         return df
     except Exception as e:
