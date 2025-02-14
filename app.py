@@ -44,19 +44,28 @@ def clean_date(date_str):
     """
     if pd.isna(date_str) or not isinstance(date_str, str):
         return None
-    
-    # Remove espaços extras e caracteres especiais
-    date_str = date_str.strip().replace('  ', ' ')
-    
+        
     try:
-        # Tenta converter a data assumindo formato dd/mm/yyyy
-        return pd.to_datetime(date_str, format='%d/%m/%Y')
-    except:
-        try:
-            # Tenta converter a data com parse automático
-            return pd.to_datetime(date_str)
-        except:
-            return None
+        # Remove espaços extras e caracteres especiais
+        date_str = date_str.strip()
+        print(f"Processando data: {date_str}")  # Log para debug
+        
+        # Se a data já estiver no formato correto dd/mm/yyyy
+        if len(date_str.split('/')) == 3:
+            return pd.to_datetime(date_str, format='%d/%m/%Y')
+            
+        # Se a data estiver no formato dd-mm-yyyy
+        if len(date_str.split('-')) == 3:
+            return pd.to_datetime(date_str, format='%d-%m-%Y')
+            
+        # Se a data estiver no formato yyyy-mm-dd
+        if date_str[4] == '-':
+            return pd.to_datetime(date_str).strftime('%d/%m/%Y')
+            
+        return None
+    except Exception as e:
+        print(f"Erro ao processar data {date_str}: {str(e)}")  # Log para debug
+        return None
 
 @st.cache_data
 def load_data(file):
@@ -85,7 +94,21 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=[idade_col])
         
+        # Imprime as primeiras linhas para debug
+        print("Primeiras linhas do DataFrame:")
+        print(df.head())
+        print("\nColunas disponíveis:", df.columns.tolist())
+        
         try:
+            # Verifica se a coluna existe
+            if 'Data Nascimento' not in df.columns:
+                print("Colunas disponíveis:", df.columns.tolist())
+                raise Exception("Coluna 'Data Nascimento' não encontrada no DataFrame")
+            
+            # Mostra alguns valores da coluna para debug
+            print("\nAmostras de Data Nascimento antes da conversão:")
+            print(df['Data Nascimento'].head())
+            
             # Processa as datas
             df['Data Nascimento'] = df['Data Nascimento'].apply(clean_date)
             df['Data Início'] = df['Data Início'].apply(clean_date)
@@ -94,10 +117,14 @@ def load_data(file):
             null_dates_nasc = df['Data Nascimento'].isnull().sum()
             null_dates_inicio = df['Data Início'].isnull().sum()
             
+            print("\nDatas após conversão:")
+            print(df[['Data Nascimento', 'Data Início']].head())
+            
             if null_dates_nasc > 0:
                 st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
             if null_dates_inicio > 0:
                 st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
+                
         except Exception as e:
             st.error(f"Erro ao processar datas: {str(e)}")
             print("Erro detalhado ao processar datas:", e)
@@ -107,13 +134,14 @@ def load_data(file):
         
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {str(e)}")
+        print("Erro detalhado ao carregar dados:", e)
         return None
                 
-        return df
-    except Exception as e:
-        st.error(f"Erro ao processar datas: {str(e)}")
-        print("Erro detalhado ao processar datas:", e)
-        return None
+            return df
+        except Exception as e:
+            st.error(f"Erro ao processar datas: {str(e)}")
+            print("Erro detalhado ao processar datas:", e)
+            return None
         
         return df
     except Exception as e:
