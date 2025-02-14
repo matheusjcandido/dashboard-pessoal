@@ -80,8 +80,8 @@ def load_data(file):
                 header_row = idx
                 break
         
-       if header_row is None:
-            raise Exception("Não foi possível encontrar a linha de cabeçalho com 'ID'")
+        if header_row is None:
+           raise Exception("Não foi possível encontrar a linha de cabeçalho com 'ID'")
             
         # Agora lê o arquivo novamente usando o número correto de linhas para pular
         df = pd.read_csv(file, encoding='cp1252', skiprows=header_row, header=0)
