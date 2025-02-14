@@ -71,7 +71,7 @@ def clean_date(date_str):
 def load_data(file):
     try:
         # Lê o arquivo pulando as linhas de cabeçalho desnecessárias (6 linhas)
-        df = pd.read_csv(file, encoding='cp1252', skiprows=6, header=0)
+        df = pd.read_csv(file, encoding='cp1252', skiprows=7, header=0)
         
         # Remove linhas totalmente vazias
         df = df.dropna(how='all')
