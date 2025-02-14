@@ -7,7 +7,7 @@ from streamlit_plotly_events import plotly_events
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard Bombeiros PR",
+    page_title="Dashboard CBMPR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -305,7 +305,7 @@ def main():
                 cargo_column,         # coluna 10
                 'Data Início',        # coluna 13
                 'Recebe Abono Permanência',  # coluna 16
-                'UF-Cidade'          # coluna 22
+                #'UF-Cidade'          # coluna 22
             ]
             
             # Preparar dados para exibição
