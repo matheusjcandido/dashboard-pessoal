@@ -99,29 +99,47 @@ def main():
         
         df[idade_column] = pd.to_numeric(df[idade_column], errors='coerce')
 
-        # Criar container para os botões com largura menor
-        st.write("Filtrar por Posto/Graduação:")
-        button_container = st.container()
-        
-        # Criar 4 colunas para os botões
-        cols = st.columns(6)
-        
-        # Inicializar estado
-        if 'cargo_selecionado' not in st.session_state:
-            st.session_state.cargo_selecionado = None
+       st.write("Filtrar por Posto/Graduação:")
 
-        # Criar botões na ordem específica
-        for i, cargo in enumerate(ORDEM_CARGOS):
-            col_idx = i % 6
-            if cargo == "Todos":
-                if cols[col_idx].button("Todos", key="btn_todos", use_container_width=True):
-                    st.session_state.cargo_selecionado = None
-            elif cargo in df[cargo_column].unique():
-                if cols[col_idx].button(cargo, key=f"btn_{i}", use_container_width=True):
-                    if st.session_state.cargo_selecionado == cargo:
-                        st.session_state.cargo_selecionado = None
-                    else:
-                        st.session_state.cargo_selecionado = cargo
+# Criar duas linhas de botões (10 na primeira, 9 na segunda)
+row1 = st.columns(10)  # Primeira linha com 10 botões
+row2 = st.columns(10)  # Segunda linha com 9 botões (um espaço vazio no final)
+
+# Inicializar estado
+if 'cargo_selecionado' not in st.session_state:
+    st.session_state.cargo_selecionado = None
+
+# Primeira linha de botões (0-9)
+for i in range(10):
+    cargo = ORDEM_CARGOS[i]
+    if cargo == "Todos":
+        if row1[i].button("Todos", key="btn_todos", use_container_width=True):
+            st.session_state.cargo_selecionado = None
+    elif cargo in df[cargo_column].unique():
+        if row1[i].button(cargo, key=f"btn_{i}", use_container_width=True):
+            if st.session_state.cargo_selecionado == cargo:
+                st.session_state.cargo_selecionado = None
+            else:
+                st.session_state.cargo_selecionado = cargo
+
+# Segunda linha de botões (10-18)
+for i in range(9):
+    idx = i + 10
+    cargo = ORDEM_CARGOS[idx]
+    if cargo in df[cargo_column].unique():
+        if row2[i].button(cargo, key=f"btn_{idx}", use_container_width=True):
+            if st.session_state.cargo_selecionado == cargo:
+                st.session_state.cargo_selecionado = None
+            else:
+                st.session_state.cargo_selecionado = cargo
+
+# Modificar a exibição do efetivo total para usar separador de milhar
+if st.session_state.cargo_selecionado:
+    df_filtered = df[df[cargo_column] == st.session_state.cargo_selecionado]
+    st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
+else:
+    df_filtered = df
+    st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
 
         # Filtrar DataFrame
         if st.session_state.cargo_selecionado:
