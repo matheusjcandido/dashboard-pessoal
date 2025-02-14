@@ -111,10 +111,10 @@ def load_data(file):
         return None
                 
         return df
-        except Exception as e:
-            st.error(f"Erro ao processar datas: {str(e)}")
-            print("Erro detalhado ao processar datas:", e)
-            return None
+    except Exception as e:
+        st.error(f"Erro ao processar datas: {str(e)}")
+        print("Erro detalhado ao processar datas:", e)
+        return None
         
         return df
     except Exception as e:
