@@ -70,8 +70,21 @@ def clean_date(date_str):
 @st.cache_data
 def load_data(file):
     try:
-        # Lê o arquivo pulando as linhas de cabeçalho desnecessárias (7 linhas)
-        df = pd.read_csv(file, encoding='cp1252', skiprows=7, header=0)
+        # Primeiro, vamos ler o arquivo para determinar onde estão os cabeçalhos
+        df_raw = pd.read_csv(file, encoding='cp1252', nrows=10)
+
+        # Encontrar a linha que contém 'ID' como primeira coluna
+        header_row = None
+        for idx, row in df_raw.iterrows():
+            if str(row[0]).strip() == 'ID':
+                header_row = idx
+                break
+        
+       if header_row is None:
+            raise Exception("Não foi possível encontrar a linha de cabeçalho com 'ID'")
+            
+        # Agora lê o arquivo novamente usando o número correto de linhas para pular
+        df = pd.read_csv(file, encoding='cp1252', skiprows=header_row, header=0)
         
         # Remove linhas totalmente vazias
         df = df.dropna(how='all')
