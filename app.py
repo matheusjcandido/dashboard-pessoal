@@ -7,7 +7,7 @@ from streamlit_plotly_events import plotly_events
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard CBMPR",
+    page_title="Dashboard Bombeiros PR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -36,6 +36,28 @@ ORDEM_CARGOS = [
     "Coronel"
 ]
 
+# Função para limpar e converter data de texto para datetime
+def clean_date(date_str):
+    """
+    Limpa e converte uma string de data para datetime.
+    Trata diferentes formatos possíveis de entrada.
+    """
+    if pd.isna(date_str) or not isinstance(date_str, str):
+        return None
+    
+    # Remove espaços extras e caracteres especiais
+    date_str = date_str.strip().replace('  ', ' ')
+    
+    try:
+        # Tenta converter a data assumindo formato dd/mm/yyyy
+        return pd.to_datetime(date_str, format='%d/%m/%Y')
+    except:
+        try:
+            # Tenta converter a data com parse automático
+            return pd.to_datetime(date_str)
+        except:
+            return None
+
 @st.cache_data
 def load_data(file):
     try:
@@ -63,9 +85,20 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=[idade_col])
         
-        # Formata as datas
-        df['Data Nascimento'] = pd.to_datetime(df['Data Nascimento'].str.strip(), format='%d/%m/%Y', errors='coerce')
-        df['Data Início'] = pd.to_datetime(df['Data Início'], format='%d/%m/%Y', errors='coerce')
+        # Trata as datas com a nova função de limpeza
+        try:
+            # Primeiro, vamos verificar o formato das datas
+            df['Data Nascimento'] = df['Data Nascimento'].apply(clean_date)
+            df['Data Início'] = df['Data Início'].apply(clean_date)
+            
+            # Verifica datas nulas após a conversão
+            null_dates_nasc = df['Data Nascimento'].isnull().sum()
+            null_dates_inicio = df['Data Início'].isnull().sum()
+            
+            if null_dates_nasc > 0:
+                st.warning(f"Atenção: {null_dates_nasc} datas de nascimento não puderam ser convertidas.")
+            if null_dates_inicio > 0:
+                st.warning(f"Atenção: {null_dates_inicio} datas de início não puderam ser convertidas.")
         
         return df
     except Exception as e:
