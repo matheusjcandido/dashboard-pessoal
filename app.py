@@ -51,9 +51,17 @@ def load_data(file):
         # Limpa os nomes das colunas
         df.columns = df.columns.str.strip()
         
-        # Converte a coluna de idade para numérico, tratando erros
+        # Identifica a coluna de idade
         idade_col = [col for col in df.columns if 'IDADE' in col.upper()][0]
+        
+        # Converte a coluna de idade para numérico, tratando erros
         df[idade_col] = pd.to_numeric(df[idade_col], errors='coerce')
+        
+        # Remove linhas com idades inválidas ou fora do intervalo esperado
+        df = df[df[idade_col].between(18, 62)]
+        
+        # Garante que não há valores nulos na coluna de idade
+        df = df.dropna(subset=[idade_col])
         
         return df
     except Exception as e:
@@ -66,14 +74,19 @@ def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
         if cargo_filter and cargo_column:
             df = df[df[cargo_column] == cargo_filter]
         
-        # Remover valores nulos ou inválidos
-        df = df[df[idade_column].notna()]
+        # Remover valores nulos ou inválidos e converter para numérico
+        df = df[pd.to_numeric(df[idade_column], errors='coerce').notna()]
+        df[idade_column] = pd.to_numeric(df[idade_column])
         
-        # Criar faixas etárias
+        # Criar faixas etárias com intervalos corretos
         bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
         labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
         
-        df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=True)
+        # Garantir que a idade está dentro dos limites
+        df = df[df[idade_column].between(18, 62)]
+        
+        # Criar faixas etárias e contar
+        df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels)
         idade_counts = df['faixa_etaria'].value_counts().sort_index()
         
         fig = px.bar(
