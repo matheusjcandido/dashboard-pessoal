@@ -62,6 +62,7 @@ def create_age_chart(df, cargo_filter=None):
    
    # Criar gráfico
    fig = px.bar(
+       data_frame=df_plot,
        x='faixa_etaria',
        y='quantidade',
        labels={'faixa_etaria': 'Faixa Etária', 'quantidade': 'Quantidade'},
