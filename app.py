@@ -2,10 +2,16 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import seaborn as sns
-import matplotlib.pyplot as plt
 from datetime import datetime
 from streamlit_plotly_events import plotly_events
+
+# Importações para visualização
+try:
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    SEABORN_AVAILABLE = True
+except ImportError:
+    SEABORN_AVAILABLE = False
 
 # Configuração da página
 st.set_page_config(
@@ -87,40 +93,33 @@ def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
         # Garantir que a idade está dentro dos limites
         df = df[df[idade_column].between(18, 62)]
         
-        # Criar faixas etárias
+        # Criar faixas etárias e contar
         df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels)
+        idade_counts = df['faixa_etaria'].value_counts().sort_index()
         
-        # Configurar o estilo do Seaborn
-        plt.style.use('seaborn')
+        # Criar o gráfico usando Plotly
+        fig = go.Figure()
         
-        # Criar uma nova figura com tamanho específico
-        plt.figure(figsize=(12, 6))
+        fig.add_trace(go.Bar(
+            x=list(idade_counts.index),
+            y=idade_counts.values,
+            marker_color='red',
+            text=idade_counts.values,  # Adiciona os valores sobre as barras
+            textposition='auto',
+        ))
         
-        # Criar o gráfico usando Seaborn
-        ax = sns.countplot(data=df, 
-                         x='faixa_etaria',
-                         color='red',
-                         order=labels)
+        fig.update_layout(
+            title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}",
+            xaxis_title="Faixa Etária",
+            yaxis_title="Quantidade",
+            showlegend=False,
+            xaxis_tickangle=45,
+            plot_bgcolor='white',
+            height=400,
+            margin=dict(t=50, b=50)
+        )
         
-        # Personalizar o gráfico
-        plt.title(f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}", 
-                 pad=20, 
-                 fontsize=14)
-        plt.xlabel('Faixa Etária', fontsize=12)
-        plt.ylabel('Quantidade', fontsize=12)
-        
-        # Rotacionar labels do eixo x
-        plt.xticks(rotation=45)
-        
-        # Adicionar os valores sobre as barras
-        for i in ax.containers:
-            ax.bar_label(i, padding=3)
-        
-        # Ajustar layout
-        plt.tight_layout()
-        
-        # Retornar a figura
-        return plt.gcf()
+        return fig
         
         fig = px.bar(
             x=idade_counts.index,
@@ -288,8 +287,7 @@ def main():
                     cargo_column
                 )
                 if fig_idade:
-                    st.pyplot(fig_idade)
-                    plt.close()
+                    st.plotly_chart(fig_idade, use_container_width=True)
             
             with col2:
                 fig_cargo = create_cargo_chart(df_filtered, cargo_column)
