@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import seaborn as sns
+import matplotlib.pyplot as plt
 from datetime import datetime
 from streamlit_plotly_events import plotly_events
 
@@ -85,9 +87,40 @@ def create_age_chart(df, idade_column, cargo_filter=None, cargo_column=None):
         # Garantir que a idade está dentro dos limites
         df = df[df[idade_column].between(18, 62)]
         
-        # Criar faixas etárias e contar
+        # Criar faixas etárias
         df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels)
-        idade_counts = df['faixa_etaria'].value_counts().sort_index()
+        
+        # Configurar o estilo do Seaborn
+        plt.style.use('seaborn')
+        
+        # Criar uma nova figura com tamanho específico
+        plt.figure(figsize=(12, 6))
+        
+        # Criar o gráfico usando Seaborn
+        ax = sns.countplot(data=df, 
+                         x='faixa_etaria',
+                         color='red',
+                         order=labels)
+        
+        # Personalizar o gráfico
+        plt.title(f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}", 
+                 pad=20, 
+                 fontsize=14)
+        plt.xlabel('Faixa Etária', fontsize=12)
+        plt.ylabel('Quantidade', fontsize=12)
+        
+        # Rotacionar labels do eixo x
+        plt.xticks(rotation=45)
+        
+        # Adicionar os valores sobre as barras
+        for i in ax.containers:
+            ax.bar_label(i, padding=3)
+        
+        # Ajustar layout
+        plt.tight_layout()
+        
+        # Retornar a figura
+        return plt.gcf()
         
         fig = px.bar(
             x=idade_counts.index,
@@ -255,16 +288,8 @@ def main():
                     cargo_column
                 )
                 if fig_idade:
-                    selected_idade = plotly_events(fig_idade, click_event=True)
-                    if selected_idade:
-                        clicked_age = selected_idade[0]['x']
-                        if 'idade_filter' not in st.session_state:
-                            st.session_state.idade_filter = []
-                        if clicked_age in st.session_state.idade_filter:
-                            st.session_state.idade_filter.remove(clicked_age)
-                        else:
-                            st.session_state.idade_filter.append(clicked_age)
-                        st.experimental_rerun()
+                    st.pyplot(fig_idade)
+                    plt.close()
             
             with col2:
                 fig_cargo = create_cargo_chart(df_filtered, cargo_column)
