@@ -45,26 +45,46 @@ def create_age_chart(df, cargo_filter=None):
        
    bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
    labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
-   df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=True)
-   idade_counts = df['faixa_etaria'].value_counts().sort_index()
-   
-   fig = px.bar(
-       x=idade_counts.index,
-       y=idade_counts.values,
-       labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
-       title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
-   )
-   fig.update_traces(
-       marker_color='red',
-       hovertemplate="Faixa: %{x}<br>Quantidade: %{y}<extra></extra>"
-   )
-   fig.update_layout(
-       showlegend=False,
-       xaxis_tickangle=0,
-       plot_bgcolor='white',
-       yaxis_gridcolor='lightgray'
-   )
-   return fig
+   # Converter idade para numérico e criar faixas
+    df[idade_column] = pd.to_numeric(df[idade_column], errors='coerce')
+    df['faixa_etaria'] = pd.cut(df[idade_column], bins=bins, labels=labels, right=False)
+    
+    # Contar frequência por faixa etária e ordenar
+    idade_counts = df['faixa_etaria'].value_counts().sort_index()
+    
+    # Criar gráfico
+    fig = px.bar(
+        x=idade_counts.index,
+        y=idade_counts.values,
+        labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
+        title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}"
+    )
+    
+    # Configurar aparência
+    fig.update_traces(
+        marker_color='red',
+        hovertemplate="Faixa: %{x}<br>Quantidade: %{y}<extra></extra>"
+    )
+    
+    # Configurar layout
+    fig.update_layout(
+        showlegend=False,
+        xaxis_tickangle=0,
+        plot_bgcolor='white',
+        yaxis_gridcolor='lightgray',
+        yaxis=dict(
+            gridcolor='lightgrey',
+            gridwidth=1,
+            dtick=100  # Ajuste o intervalo do eixo y conforme necessário
+        ),
+        xaxis=dict(
+            tickmode='array',
+            ticktext=labels,
+            tickvals=labels
+        )
+    )
+    
+    return fig
 
 def create_cargo_chart(df, cargo_filter=None):
    if cargo_filter:
