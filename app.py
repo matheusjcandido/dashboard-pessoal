@@ -75,12 +75,7 @@ class DataLoader:
                 'UF-Cidade': str
             }
 
-            # Converte a coluna de idade para float e remove ','
-            converters = {
-                'Idade': lambda x: float(str(x).replace(',', '.') if pd.notnull(x) else None)
-            }
-            
-            # Carrega o CSV primeiro sem parse_dates
+            # Carrega o CSV primeiro sem converters específicos
             df = pd.read_csv(
                 file,
                 encoding='cp1252',
@@ -119,8 +114,23 @@ class DataLoader:
             df = df.dropna(how='all')
             
             # Processa a coluna de idade
-            df['Idade'] = pd.to_numeric(df['Idade'].str.replace(',', '.'), errors='coerce')
-            df = df[df['Idade'].between(18, 62)]  # Filtra idades válidas
+            try:
+                if 'Idade' in df.columns:
+                    # Primeiro, limpa a coluna removendo espaços e substituindo vírgulas por pontos
+                    df['Idade'] = df['Idade'].astype(str).str.strip()
+                    df['Idade'] = df['Idade'].str.replace(',', '.')
+                    # Converte para numérico, tratando erros como NaN
+                    df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+                    # Filtra idades válidas
+                    df = df[df['Idade'].between(18, 62, inclusive='both')]
+                else:
+                    logger.error("Coluna 'Idade' não encontrada no DataFrame")
+                    st.error("Coluna 'Idade' não encontrada nos dados")
+                    return None
+            except Exception as e:
+                logger.error(f"Erro ao processar coluna 'Idade': {str(e)}")
+                st.error(f"Erro ao processar coluna 'Idade': {str(e)}")
+                return None
             
             # Limpa CPF (remove pontuação)
             df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
