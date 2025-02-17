@@ -7,7 +7,7 @@ from streamlit_plotly_events import plotly_events
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard Bombeiros PR",
+    page_title="Dashboard CBMPR",
     page_icon="🚒",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -70,11 +70,20 @@ def clean_date(date_str):
 @st.cache_data
 def load_data(file):
     try:
+        column_names = [
+            'ID', 'Nome', 'RG', 'CPF', 'Data Nascimento', 'Idade', 'Órgão', 
+            'Código da Unidade de Trabalho', 'Descrição da Unidade de Trabalho',
+            'Cargo', 'Função', 'Espec. Função', 'Data Início', 'Tipo Empregado',
+            'Tipo Provimento', 'Recebe Abono Permanência', 'Categoria do Trabalhador',
+            'Regime Trabalhista', 'Regime Previdenciário', 'Plano de Segregação da Massa',
+            'Sujeito ao Teto do RGPS', 'UF-Cidade'
+        ]
         # Primeiro, vamos tentar ler o arquivo usando um parser mais robusto
         df = pd.read_csv(file, encoding='cp1252', 
-                         skiprows=7,  # Pula o cabeçalho inicial
-                         header=0,    # Primeira linha como cabeçalho
-                         sep=',',     # Especifica o separador
+                         skiprows=9,  # Pula o cabeçalho inicial
+                         header=None,   
+                         names=column_names, # Define os nomes das colunas
+                         sep=';',     # Especifica o separador
                          on_bad_lines='skip',  # Pula linhas problemáticas
                          quoting=3,   # Desativa o processamento de aspas
                          engine='python')  # Usa o engine python que é mais flexível
