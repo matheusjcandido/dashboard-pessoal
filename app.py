@@ -80,20 +80,21 @@ class DataLoader:
                 'Idade': lambda x: float(str(x).replace(',', '.') if pd.notnull(x) else None)
             }
             
-            # Parse dates para estas colunas
-            date_columns = ['Data Nascimento', 'Data Início']
-            
-            # Carrega o CSV
+            # Carrega o CSV primeiro sem parse_dates
             df = pd.read_csv(
                 file,
                 encoding='cp1252',
                 sep=';',
                 dtype=dtype_dict,
                 converters=converters,
-                parse_dates=date_columns,
-                date_parser=lambda x: pd.to_datetime(x, format='%d/%m/%Y', errors='coerce'),
                 on_bad_lines='skip'
             )
+            
+            # Converte as colunas de data após carregar o DataFrame
+            date_columns = ['Data Nascimento', 'Data Início']
+            for col in date_columns:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
             
             # Limpa e processa os dados
             df = DataLoader._process_dataframe(df)
