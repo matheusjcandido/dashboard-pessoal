@@ -78,14 +78,19 @@ def load_data(file):
             'Regime Trabalhista', 'Regime Previdenciário', 'Plano de Segregação da Massa',
             'Sujeito ao Teto do RGPS', 'UF-Cidade'
         ]
+
+        # Definir os tipos de dados para cada coluna
+        dtype_dict = {col: str for col in column_names}  # Inicialmente, todas as colunas como string
+        dtype_dict['Idade'] = 'float64'  # Idade como número
+        
         # Primeiro, vamos tentar ler o arquivo usando um parser mais robusto
         df = pd.read_csv(file, encoding='cp1252', 
                          skiprows=9,  # Pula o cabeçalho inicial
                          header=None,   
                          names=column_names, # Define os nomes das colunas
                          sep=';',     # Especifica o separador
+                         dtype=dtype_dict, # Especifica os tipos de dados
                          on_bad_lines='skip',  # Pula linhas problemáticas
-                         quoting=3,   # Desativa o processamento de aspas
                          engine='python')  # Usa o engine python que é mais flexível
         
         # Remove linhas totalmente vazias
@@ -112,10 +117,11 @@ def load_data(file):
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=['Idade'])
         
-        # Apenas remove espaços extras das datas, mantendo como texto
-        df['Data Nascimento'] = df['Data Nascimento'].str.strip()
-        df['Data Início'] = df['Data Início'].str.strip()
-        
+        # Limpa espaços extras das strings
+        string_columns = df.select_dtypes(include=['object']).columns
+        for col in string_columns:
+            df[col] = df[col].astype(str).str.strip()
+            
         return df
         
     except Exception as e:
