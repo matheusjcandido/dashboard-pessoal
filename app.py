@@ -4,7 +4,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 from typing import Optional
 import logging
-import re
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
@@ -46,40 +45,10 @@ class DataLoader:
     ]
 
     @staticmethod
-    def extract_metadata(file) -> dict:
-        """Extrai metadados do cabeçalho do arquivo"""
-        try:
-            # Lê as primeiras linhas para extrair metadados
-            header_lines = []
-            for i in range(9):  # Lê as 9 linhas do cabeçalho
-                line = file.readline().decode('cp1252').strip()
-                header_lines.append(line)
-            
-            # Volta o arquivo ao início
-            file.seek(0)
-            
-            # Extrai data de pagamento diretamente da linha 5
-            date_pattern = r'Data de pagamento:(\d{4}-\d{2}-\d{2})'
-            payment_date = None
-            if match:= re.search(date_pattern, header_lines):
-                payment_date = datetime.strptime(match.group(1), '%Y-%m-%d')
-            
-            return {
-                'payment_date': payment_date,
-                'header_info': header_lines
-            }
-        except Exception as e:
-            st.error(f"Erro ao extrair metadados: {str(e)}")
-            return {}
-
-    @staticmethod
     @st.cache_data(ttl=3600)
     def load_data(file) -> pd.DataFrame:
         """Carrega e processa o arquivo CSV"""
         try:
-            # Extrai metadados
-            metadata = DataLoader.extract_metadata(file)
-            
             # Define tipos de dados para todas as colunas
             dtype_dict = {
                 'ID': str,
@@ -108,7 +77,7 @@ class DataLoader:
 
             # Converte a coluna de idade para float e remove ','
             converters = {
-                'Idade': lambda x: float(x.replace(',', '.'))
+                'Idade': lambda x: float(str(x).replace(',', '.') if pd.notnull(x) else None)
             }
             
             # Parse dates para estas colunas
@@ -119,8 +88,8 @@ class DataLoader:
                 file,
                 encoding='cp1252',
                 sep=';',
-                skiprows=9,
                 dtype=dtype_dict,
+                converters=converters,
                 parse_dates=date_columns,
                 date_parser=lambda x: pd.to_datetime(x, format='%d/%m/%Y', errors='coerce'),
                 on_bad_lines='skip'
@@ -129,42 +98,45 @@ class DataLoader:
             # Limpa e processa os dados
             df = DataLoader._process_dataframe(df)
             
-            # Adiciona metadados como atributos do DataFrame
-            df.attrs['metadata'] = metadata
-            
             return df
             
         except Exception as e:
+            logger.error(f"Erro ao carregar dados: {str(e)}")
             st.error(f"Erro ao carregar dados: {str(e)}")
             return None
 
     @staticmethod
     def _process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         """Processa e limpa o DataFrame"""
-        # Corrige o deslocamento de colunas causado por ';' extras
-        df['UF-Cidade'] = df['UF-Cidade'].str.replace('; ', ';', regex=False)
-        df['UF-Cidade'] = df['UF-Cidade'].str.replace(';;', ';', regex=False)
+        try:
+            # Corrige o deslocamento de colunas causado por ';' extras
+            if 'UF-Cidade' in df.columns:
+                df['UF-Cidade'] = df['UF-Cidade'].str.replace('; ', ';', regex=False)
+                df['UF-Cidade'] = df['UF-Cidade'].str.replace(';;', ';', regex=False)
 
-        # Remove linhas totalmente vazias
-        df = df.dropna(how='all')
-        
-        # Processa a coluna de idade
-        df['Idade'] = df['Idade'].str.replace(',', '.').astype(float)
-        df = df[df['Idade'].between(18, 62)]  # Filtra idades válidas
-        
-        # Limpa CPF (remove pontuação)
-        df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
-        
-        # Limpa espaços extras em colunas de texto
-        text_columns = df.select_dtypes(include=['object']).columns
-        for col in text_columns:
-            df[col] = df[col].str.strip()
-        
-        # Garante ordem das colunas conforme esperado
-        expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
-        df = df[expected_cols]
-        
-        return df
+            # Remove linhas totalmente vazias
+            df = df.dropna(how='all')
+            
+            # Processa a coluna de idade
+            df['Idade'] = pd.to_numeric(df['Idade'].str.replace(',', '.'), errors='coerce')
+            df = df[df['Idade'].between(18, 62)]  # Filtra idades válidas
+            
+            # Limpa CPF (remove pontuação)
+            df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
+            
+            # Limpa espaços extras em colunas de texto
+            text_columns = df.select_dtypes(include=['object']).columns
+            for col in text_columns:
+                df[col] = df[col].str.strip()
+            
+            # Garante ordem das colunas conforme esperado
+            expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
+            df = df[expected_cols]
+            
+            return df
+        except Exception as e:
+            logger.error(f"Erro ao processar DataFrame: {str(e)}")
+            raise
 
 class DataValidator:
     """Classe para validação dos dados"""
@@ -201,7 +173,7 @@ class ChartManager:
     def create_age_chart(df: pd.DataFrame, cargo_filter: Optional[str] = None) -> go.Figure:
         """Cria gráfico de distribuição de idade"""
         try:
-            if cargo_filter and cargo_filter!= "Todos":
+            if cargo_filter and cargo_filter != "Todos":
                 df = df[df['Cargo'] == cargo_filter]
             
             # Criar faixas etárias
@@ -220,7 +192,7 @@ class ChartManager:
             ))
             
             fig.update_layout(
-                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter and cargo_filter!= 'Todos' else ''}",
+                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter and cargo_filter != 'Todos' else ''}",
                 xaxis_title="Faixa Etária",
                 yaxis_title="Quantidade",
                 showlegend=False,
@@ -282,14 +254,14 @@ class DashboardUI:
         
         st.markdown("""
             <style>
-          .main {
+            .main {
                 padding: 1rem;
             }
-          .stButton > button {
+            .stButton > button {
                 width: 100%;
                 padding: 0.3rem;
             }
-          .metric-container {
+            .metric-container {
                 background-color: #f0f2f6;
                 padding: 1rem;
                 border-radius: 0.5rem;
@@ -318,30 +290,26 @@ class DashboardUI:
     @staticmethod
     def create_cargo_filters():
         """Cria filtros de cargo"""
+        if 'cargo_selecionado' not in st.session_state:
+            st.session_state.cargo_selecionado = "Todos"
+            
+        # Cria duas linhas com 10 colunas cada
         row1 = st.columns(10)
         row2 = st.columns(10)
         
-        if 'cargo_selecionado' not in st.session_state:
-            st.session_state.cargo_selecionado = "Todos"
-        
-        # Primeira linha de botões
+        # Primeira linha de botões (0-9)
         for i in range(10):
             cargo = ORDEM_CARGOS[i]
             if row1[i].button(cargo, key=f"btn_{i}", use_container_width=True):
-                if st.session_state.cargo_selecionado == cargo:
-                    st.session_state.cargo_selecionado = "Todos"
-                else:
-                    st.session_state.cargo_selecionado = cargo
+                st.session_state.cargo_selecionado = "Todos" if st.session_state.cargo_selecionado == cargo else cargo
         
-        # Segunda linha de botões
-        for i in range(9):
+        # Segunda linha de botões (10-18)
+        remaining_cargos = len(ORDEM_CARGOS) - 10
+        for i in range(remaining_cargos):
             idx = i + 10
             cargo = ORDEM_CARGOS[idx]
             if row2[i].button(cargo, key=f"btn_{idx}", use_container_width=True):
-                if st.session_state.cargo_selecionado == cargo:
-                    st.session_state.cargo_selecionado = "Todos"
-                else:
-                    st.session_state.cargo_selecionado = cargo
+                st.session_state.cargo_selecionado = "Todos" if st.session_state.cargo_selecionado == cargo else cargo
 
     @staticmethod
     def display_detailed_data(df: pd.DataFrame):
@@ -394,10 +362,6 @@ def main():
         df = DataLoader.load_data(uploaded_file)
         
         if df is not None and DataValidator.validate_dataframe(df):
-            # Exibe metadados do arquivo
-            if 'metadata' in df.attrs:
-                st.info(f"Data de Pagamento: {df.attrs['metadata'].get('payment_date', 'Não disponível')}")
-            
             # Criar métricas resumidas
             DashboardUI.create_summary_metrics(df)
             
@@ -406,7 +370,7 @@ def main():
             DashboardUI.create_cargo_filters()
             
             # Aplicar filtro selecionado
-            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado!= "Todos":
+            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
                 df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
                 st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
             else:
