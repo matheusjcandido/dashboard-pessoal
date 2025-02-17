@@ -3,182 +3,273 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-from dataclasses import dataclass
-from typing import Optional, List, Dict
+from typing import Optional, List
 import logging
 
-# Configure logging
+# Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@dataclass
-class DashboardConfig:
-    """Configuration class for dashboard settings"""
-    page_title: str = "Dashboard CBMPR"
-    page_icon: str = "🚒"
-    layout: str = "wide"
-    initial_sidebar_state: str = "expanded"
-    idade_min: int = 18
-    idade_max: int = 62
-
-class DataProcessor:
-    """Class to handle data processing operations"""
-    
-    @staticmethod
-    @st.cache_data(ttl=3600)  # Cache for 1 hour
-    def load_data(file) -> Optional[pd.DataFrame]:
-        """Load and process CSV data with better error handling and caching"""
-        try:
-            column_names = [
-                'ID', 'Nome', 'RG', 'CPF', 'Data Nascimento', 'Idade', 'Órgão',
-                'Código da Unidade de Trabalho', 'Descrição da Unidade de Trabalho',
-                'Cargo', 'Função', 'Espec. Função', 'Data Início'
-            ]
-            
-            df = pd.read_csv(
-                file,
-                encoding='cp1252',
-                skiprows=9,
-                header=None,
-                names=column_names,
-                sep=';',
-                dtype={col: str for col in column_names},
-                on_bad_lines='skip'
-            )
-            
-            return DataProcessor._clean_dataframe(df)
-            
-        except Exception as e:
-            logger.error(f"Error loading data: {str(e)}")
-            return None
-
-    @staticmethod
-    def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-        """Clean and prepare DataFrame"""
-        df = df.dropna(how='all').dropna(axis=1, how='all')
-        
-        # Clean string columns
-        for col in df.select_dtypes(include=['object']).columns:
-            df[col] = df[col].astype(str).str.strip()
-        
-        # Convert age to numeric
-        df['Idade'] = pd.to_numeric(df['Idade'].str.replace(',', '.'), errors='coerce')
-        
-        # Filter valid ages
-        df = df[df['Idade'].between(DashboardConfig.idade_min, DashboardConfig.idade_max)]
-        
-        return df
+# Configurações e constantes
+ORDEM_CARGOS = [
+    "Todos",
+    "Soldado 2ª Classe",
+    "Soldado 1ª Classe",
+    "Cabo",
+    "3º Sargento",
+    "2º Sargento",
+    "1º Sargento",
+    "Subtenente",
+    "Aluno de 1º Ano",
+    "Aluno de 2º Ano",
+    "Aluno de 3º Ano",
+    "Aspirante a Oficial",
+    "2º Tenente",
+    "2º Tenente 6",
+    "1º Tenente",
+    "Capitão",
+    "Major",
+    "Tenente Coronel",
+    "Coronel"
+]
 
 class ChartManager:
-    """Class to handle chart creation and updates"""
+    """Gerenciador de gráficos do dashboard"""
     
     @staticmethod
-    def create_age_distribution(df: pd.DataFrame, idade_column: str, cargo_filter: Optional[str] = None) -> go.Figure:
-        """Create age distribution chart with improved styling"""
+    def create_age_chart(df: pd.DataFrame, cargo_filter: Optional[str] = None) -> go.Figure:
+        """Cria gráfico de distribuição de idade"""
         try:
-            filtered_df = df[df['Cargo'] == cargo_filter] if cargo_filter else df
+            if cargo_filter:
+                df = df[df['Cargo'] == cargo_filter]
             
-            bins = list(range(18, 63, 5))
-            labels = [f'{bins[i]}-{bins[i+1]-1}' for i in range(len(bins)-1)]
+            # Criar faixas etárias
+            bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
+            labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
             
-            filtered_df['faixa_etaria'] = pd.cut(filtered_df[idade_column], bins=bins, labels=labels)
-            idade_counts = filtered_df['faixa_etaria'].value_counts().sort_index()
+            df['faixa_etaria'] = pd.cut(df['Idade'], bins=bins, labels=labels)
+            idade_counts = df['faixa_etaria'].value_counts().sort_index()
             
             fig = go.Figure(go.Bar(
                 x=list(idade_counts.index),
                 y=idade_counts.values,
-                marker_color='rgba(255, 0, 0, 0.7)',
+                marker_color='red',
                 text=idade_counts.values,
                 textposition='auto',
             ))
             
             fig.update_layout(
-                title=dict(
-                    text=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}",
-                    font=dict(size=20)
-                ),
+                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}",
                 xaxis_title="Faixa Etária",
                 yaxis_title="Quantidade",
-                template="plotly_white",
+                showlegend=False,
+                plot_bgcolor='white',
                 height=400,
-                hovermode='x'
+                margin=dict(t=50, b=50)
             )
             
             return fig
-            
         except Exception as e:
-            logger.error(f"Error creating age chart: {str(e)}")
+            logger.error(f"Erro ao criar gráfico de idade: {str(e)}")
+            return None
+
+    @staticmethod
+    def create_cargo_chart(df: pd.DataFrame) -> go.Figure:
+        """Cria gráfico de distribuição por cargo"""
+        try:
+            cargo_counts = df['Cargo'].value_counts()
+            cargo_counts = cargo_counts.reindex(
+                [cargo for cargo in ORDEM_CARGOS if cargo in cargo_counts.index]
+            )
+            
+            fig = go.Figure(go.Bar(
+                x=cargo_counts.values,
+                y=cargo_counts.index,
+                orientation='h',
+                marker_color='gold',
+                text=cargo_counts.values,
+                textposition='auto',
+            ))
+            
+            fig.update_layout(
+                title="Distribuição por Posto/Graduação",
+                xaxis_title="Quantidade",
+                yaxis_title="Posto/Graduação",
+                showlegend=False,
+                plot_bgcolor='white',
+                height=400,
+                margin=dict(t=50, b=50)
+            )
+            
+            return fig
+        except Exception as e:
+            logger.error(f"Erro ao criar gráfico de cargos: {str(e)}")
             return None
 
 class DashboardUI:
-    """Class to handle UI components and layout"""
-    
-    def __init__(self):
-        self.config = DashboardConfig()
-        self.setup_page_config()
-        
-    def setup_page_config(self):
-        """Configure page settings"""
-        st.set_page_config(
-            page_title=self.config.page_title,
-            page_icon=self.config.page_icon,
-            layout=self.config.layout,
-            initial_sidebar_state=self.config.initial_sidebar_state
-        )
-        
-        self.apply_custom_css()
+    """Gerenciador da interface do usuário"""
     
     @staticmethod
-    def apply_custom_css():
-        """Apply custom CSS styling"""
+    def setup_page():
+        """Configura a página do Streamlit"""
+        st.set_page_config(
+            page_title="Dashboard CBMPR",
+            page_icon="🚒",
+            layout="wide",
+            initial_sidebar_state="expanded"
+        )
+        
         st.markdown("""
             <style>
-            .stApp {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-            .metric-card {
-                background-color: #f0f2f6;
-                border-radius: 0.5rem;
+            .main {
                 padding: 1rem;
+            }
+            .stButton > button {
+                width: 100%;
+                padding: 0.3rem;
+            }
+            .metric-container {
+                background-color: #f0f2f6;
+                padding: 1rem;
+                border-radius: 0.5rem;
                 margin: 0.5rem 0;
             }
             </style>
         """, unsafe_allow_html=True)
 
+    @staticmethod
+    def create_summary_metrics(df: pd.DataFrame):
+        """Cria métricas resumidas"""
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                "Total de Efetivo",
+                f"{len(df):,}".replace(",", ".")
+            )
+        
+        with col2:
+            st.metric(
+                "Idade Média",
+                f"{df['Idade'].mean():.1f} anos"
+            )
+
+    @staticmethod
+    def create_cargo_filters():
+        """Cria filtros de cargo"""
+        row1 = st.columns(10)
+        row2 = st.columns(10)
+        
+        if 'cargo_selecionado' not in st.session_state:
+            st.session_state.cargo_selecionado = None
+        
+        # Primeira linha de botões
+        for i in range(10):
+            cargo = ORDEM_CARGOS[i]
+            if row1[i].button(cargo, key=f"btn_{i}", use_container_width=True):
+                if st.session_state.cargo_selecionado == cargo:
+                    st.session_state.cargo_selecionado = None
+                else:
+                    st.session_state.cargo_selecionado = cargo
+        
+        # Segunda linha de botões
+        for i in range(9):
+            idx = i + 10
+            cargo = ORDEM_CARGOS[idx]
+            if row2[i].button(cargo, key=f"btn_{idx}", use_container_width=True):
+                if st.session_state.cargo_selecionado == cargo:
+                    st.session_state.cargo_selecionado = None
+                else:
+                    st.session_state.cargo_selecionado = cargo
+
+    @staticmethod
+    def display_detailed_data(df: pd.DataFrame):
+        """Exibe dados detalhados com filtros"""
+        st.subheader("Dados Detalhados")
+        
+        # Filtro de pesquisa
+        search_term = st.text_input("Pesquisar por nome:", "")
+        
+        if search_term:
+            df = df[df['Nome'].str.contains(search_term, case=False, na=False)]
+        
+        # Seleciona colunas para exibição
+        display_columns = [
+            'Nome', 'CPF', 'Data Nascimento', 'Idade',
+            'Código da Unidade de Trabalho',
+            'Descrição da Unidade de Trabalho',
+            'Cargo', 'Data Início',
+            'Recebe Abono Permanência'
+        ]
+        
+        # Formata as colunas de data
+        df_display = df[display_columns].copy()
+        date_columns = ['Data Nascimento', 'Data Início']
+        for col in date_columns:
+            df_display[col] = df_display[col].dt.strftime('%d/%m/%Y')
+        
+        # Exibe o DataFrame
+        st.dataframe(df_display, use_container_width=True, height=400)
+        
+        # Botão de download
+        csv = df_display.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download dos dados filtrados",
+            data=csv,
+            file_name=f"dados_bombeiros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+
 def main():
-    """Main application entry point"""
-    dashboard = DashboardUI()
-    data_processor = DataProcessor()
+    """Função principal do dashboard"""
+    DashboardUI.setup_page()
     
     st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
     
     uploaded_file = st.file_uploader("Upload de Dados", type="csv")
     
-    if uploaded_file:
-        df = data_processor.load_data(uploaded_file)
+    if uploaded_file is not None:
+        # Carrega os dados usando o DataLoader definido anteriormente
+        df = DataLoader.load_data(uploaded_file)
         
-        if df is not None:
-            # Initialize session state if needed
-            if 'cargo_selecionado' not in st.session_state:
-                st.session_state.cargo_selecionado = None
+        if df is not None and DataValidator.validate_dataframe(df):
+            # Exibe metadados do arquivo
+            if 'metadata' in df.attrs:
+                st.info(f"Data de Pagamento: {df.attrs['metadata'].get('payment_date', 'Não disponível')}")
             
-            # Create dashboard components
-            charts = ChartManager()
+            # Criar métricas resumidas
+            DashboardUI.create_summary_metrics(df)
             
-            # Display metrics and charts
+            # Criar filtros de cargo
+            st.write("Filtrar por Posto/Graduação:")
+            DashboardUI.create_cargo_filters()
+            
+            # Aplicar filtro selecionado
+            if st.session_state.cargo_selecionado:
+                df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
+                st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
+            else:
+                df_filtered = df
+                st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
+            
+            # Criar gráficos
             col1, col2 = st.columns(2)
             
             with col1:
-                fig_idade = charts.create_age_distribution(
-                    df,
-                    'Idade',
+                fig_idade = ChartManager.create_age_chart(
+                    df_filtered,
                     st.session_state.cargo_selecionado
                 )
                 if fig_idade:
                     st.plotly_chart(fig_idade, use_container_width=True)
             
-            # Add more dashboard components here...
+            with col2:
+                fig_cargo = ChartManager.create_cargo_chart(df_filtered)
+                if fig_cargo:
+                    st.plotly_chart(fig_cargo, use_container_width=True)
+            
+            # Exibir dados detalhados
+            DashboardUI.display_detailed_data(df_filtered)
 
 if __name__ == "__main__":
     main()
