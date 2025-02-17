@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 from typing import Optional, List
 import logging
+import re
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,145 @@ ORDEM_CARGOS = [
     "Coronel"
 ]
 
+class DataLoader:
+    """Classe responsável por carregar e processar os dados do CSV"""
+    
+    EXPECTED_COLUMNS = [
+        'ID', 'Nome', 'RG', 'CPF', 'Data Nascimento', 'Idade', 'Órgão',
+        'Código da Unidade de Trabalho', 'Descrição da Unidade de Trabalho',
+        'Cargo', 'Função', 'Espec. Função', 'Data Início', 'Tipo Empregado',
+        'Tipo Provimento', 'Recebe Abono Permanência', 'Categoria do Trabalhador',
+        'Regime Trabalhista', 'Regime Previdenciário', 'Plano de Segregação da Massa',
+        'Sujeito ao Teto do RGPS', 'UF-Cidade'
+    ]
+
+    @staticmethod
+    def extract_metadata(file) -> dict:
+        """Extrai metadados do cabeçalho do arquivo"""
+        try:
+            # Lê as primeiras linhas para extrair metadados
+            header_lines = []
+            for i in range(9):  # Lê as 9 linhas do cabeçalho
+                line = file.readline().decode('cp1252').strip()
+                header_lines.append(line)
+            
+            # Volta o arquivo ao início
+            file.seek(0)
+            
+            # Extrai data de pagamento
+            date_pattern = r'Data de pagamento :(\d{4}-\d{2}-\d{2})'
+            payment_date = None
+            for line in header_lines:
+                if match := re.search(date_pattern, line):
+                    payment_date = datetime.strptime(match.group(1), '%Y-%m-%d')
+            
+            return {
+                'payment_date': payment_date,
+                'header_info': header_lines
+            }
+        except Exception as e:
+            st.error(f"Erro ao extrair metadados: {str(e)}")
+            return {}
+
+    @staticmethod
+    @st.cache_data(ttl=3600)
+    def load_data(file) -> pd.DataFrame:
+        """Carrega e processa o arquivo CSV"""
+        try:
+            # Extrai metadados
+            metadata = DataLoader.extract_metadata(file)
+            
+            # Define tipos de dados para as colunas
+            dtype_dict = {
+                'ID': str,
+                'Nome': str,
+                'RG': str,
+                'CPF': str,
+                'Idade': str,  # Será convertido depois
+                'Órgão': str,
+                'Código da Unidade de Trabalho': str,
+                'Cargo': str
+            }
+            
+            # Parse dates para estas colunas
+            date_columns = ['Data Nascimento', 'Data Início']
+            
+            # Carrega o CSV
+            df = pd.read_csv(
+                file,
+                encoding='cp1252',
+                sep=';',
+                skiprows=9,
+                dtype=dtype_dict,
+                parse_dates=date_columns,
+                date_parser=lambda x: pd.to_datetime(x, format='%d/%m/%Y', errors='coerce'),
+                on_bad_lines='skip'
+            )
+            
+            # Limpa e processa os dados
+            df = DataLoader._process_dataframe(df)
+            
+            # Adiciona metadados como atributos do DataFrame
+            df.attrs['metadata'] = metadata
+            
+            return df
+            
+        except Exception as e:
+            st.error(f"Erro ao carregar dados: {str(e)}")
+            return None
+
+    @staticmethod
+    def _process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        """Processa e limpa o DataFrame"""
+        # Remove linhas totalmente vazias
+        df = df.dropna(how='all')
+        
+        # Processa a coluna de idade
+        df['Idade'] = df['Idade'].str.replace(',', '.').astype(float)
+        df = df[df['Idade'].between(18, 62)]  # Filtra idades válidas
+        
+        # Limpa CPF (remove pontuação)
+        df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
+        
+        # Limpa espaços extras em colunas de texto
+        text_columns = df.select_dtypes(include=['object']).columns
+        for col in text_columns:
+            df[col] = df[col].str.strip()
+        
+        # Garante ordem das colunas conforme esperado
+        expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
+        df = df[expected_cols]
+        
+        return df
+
+class DataValidator:
+    """Classe para validação dos dados"""
+    
+    @staticmethod
+    def validate_dataframe(df: pd.DataFrame) -> bool:
+        """Valida o DataFrame carregado"""
+        if df is None:
+            st.error("DataFrame não foi carregado corretamente")
+            return False
+            
+        # Verifica colunas obrigatórias
+        required_columns = ['Nome', 'CPF', 'Idade', 'Cargo']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            st.error(f"Colunas obrigatórias faltando: {missing_columns}")
+            return False
+            
+        # Verifica valores únicos em colunas chave
+        if df['CPF'].duplicated().any():
+            st.warning("Existem CPFs duplicados nos dados")
+            
+        # Verifica distribuição de idades
+        idade_stats = df['Idade'].describe()
+        if idade_stats['min'] < 18 or idade_stats['max'] > 62:
+            st.warning("Existem idades fora do intervalo esperado (18-62)")
+            
+        return True
+
 class ChartManager:
     """Gerenciador de gráficos do dashboard"""
     
@@ -40,7 +180,7 @@ class ChartManager:
     def create_age_chart(df: pd.DataFrame, cargo_filter: Optional[str] = None) -> go.Figure:
         """Cria gráfico de distribuição de idade"""
         try:
-            if cargo_filter:
+            if cargo_filter and cargo_filter != "Todos":
                 df = df[df['Cargo'] == cargo_filter]
             
             # Criar faixas etárias
@@ -59,7 +199,7 @@ class ChartManager:
             ))
             
             fig.update_layout(
-                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter else ''}",
+                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter and cargo_filter != 'Todos' else ''}",
                 xaxis_title="Faixa Etária",
                 yaxis_title="Quantidade",
                 showlegend=False,
@@ -161,14 +301,14 @@ class DashboardUI:
         row2 = st.columns(10)
         
         if 'cargo_selecionado' not in st.session_state:
-            st.session_state.cargo_selecionado = None
+            st.session_state.cargo_selecionado = "Todos"
         
         # Primeira linha de botões
         for i in range(10):
             cargo = ORDEM_CARGOS[i]
             if row1[i].button(cargo, key=f"btn_{i}", use_container_width=True):
                 if st.session_state.cargo_selecionado == cargo:
-                    st.session_state.cargo_selecionado = None
+                    st.session_state.cargo_selecionado = "Todos"
                 else:
                     st.session_state.cargo_selecionado = cargo
         
@@ -178,7 +318,7 @@ class DashboardUI:
             cargo = ORDEM_CARGOS[idx]
             if row2[i].button(cargo, key=f"btn_{idx}", use_container_width=True):
                 if st.session_state.cargo_selecionado == cargo:
-                    st.session_state.cargo_selecionado = None
+                    st.session_state.cargo_selecionado = "Todos"
                 else:
                     st.session_state.cargo_selecionado = cargo
 
@@ -206,7 +346,7 @@ class DashboardUI:
         df_display = df[display_columns].copy()
         date_columns = ['Data Nascimento', 'Data Início']
         for col in date_columns:
-            df_display[col] = df_display[col].dt.strftime('%d/%m/%Y')
+            df_display[col] = pd.to_datetime(df_display[col]).dt.strftime('%d/%m/%Y')
         
         # Exibe o DataFrame
         st.dataframe(df_display, use_container_width=True, height=400)
@@ -229,7 +369,7 @@ def main():
     uploaded_file = st.file_uploader("Upload de Dados", type="csv")
     
     if uploaded_file is not None:
-        # Carrega os dados usando o DataLoader definido anteriormente
+        # Carrega os dados
         df = DataLoader.load_data(uploaded_file)
         
         if df is not None and DataValidator.validate_dataframe(df):
@@ -245,7 +385,7 @@ def main():
             DashboardUI.create_cargo_filters()
             
             # Aplicar filtro selecionado
-            if st.session_state.cargo_selecionado:
+            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
                 df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
                 st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
             else:
