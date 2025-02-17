@@ -75,13 +75,12 @@ class DataLoader:
                 'UF-Cidade': str
             }
 
-            # Carrega o CSV primeiro sem converters específicos
+            # Carrega o CSV sem processamento específico
             df = pd.read_csv(
                 file,
                 encoding='cp1252',
                 sep=';',
                 dtype=dtype_dict,
-                converters=converters,
                 on_bad_lines='skip'
             )
             
