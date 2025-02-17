@@ -50,7 +50,7 @@ class DataLoader:
         """Extrai metadados do cabeçalho do arquivo"""
         try:
             # Lê as primeiras linhas para extrair metadados
-            header_lines =
+            header_lines = []
             for i in range(9):  # Lê as 9 linhas do cabeçalho
                 line = file.readline().decode('cp1252').strip()
                 header_lines.append(line)
@@ -205,7 +205,7 @@ class ChartManager:
                 df = df[df['Cargo'] == cargo_filter]
             
             # Criar faixas etárias
-            bins =
+            bins = [18, 22, 27, 32, 37, 42, 47, 52, 57, 62]
             labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
             
             df['faixa_etaria'] = pd.cut(df['Idade'], bins=bins, labels=labels)
