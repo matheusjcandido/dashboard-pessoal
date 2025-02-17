@@ -81,7 +81,6 @@ def load_data(file):
 
         # Definir os tipos de dados para cada coluna
         dtype_dict = {col: str for col in column_names}  # Inicialmente, todas as colunas como string
-        dtype_dict['Idade'] = 'float64'  # Idade como número
         
         # Primeiro, vamos tentar ler o arquivo usando um parser mais robusto
         df = pd.read_csv(file, encoding='cp1252', 
@@ -98,29 +97,20 @@ def load_data(file):
         
         # Remove colunas totalmente vazias
         df = df.dropna(axis=1, how='all')
-        
-        # Limpa os nomes das colunas
-        df.columns = df.columns.str.strip()
-        
-        # Garantir que as colunas necessárias existem
-        required_columns = ['Data Nascimento', 'Data Início', 'Idade']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            raise Exception(f"Colunas não encontradas: {', '.join(missing_columns)}")
-        
-        # Converte a coluna de idade para numérico, tratando erros
-        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+
+        # Limpa espaços extras das strings
+        string_columns = df.select_dtypes(include=['object']).columns
+        for col in string_columns:
+            df[col] = df[col].astype(str).str.strip()
+
+        # Agora converte a idade para numérico após a limpeza
+        df['Idade'] = df['Idade'].str.replace(',', '.').astype(float)
         
         # Remove linhas com idades inválidas ou fora do intervalo esperado
         df = df[df['Idade'].between(18, 62)]
         
         # Garante que não há valores nulos na coluna de idade
         df = df.dropna(subset=['Idade'])
-        
-        # Limpa espaços extras das strings
-        string_columns = df.select_dtypes(include=['object']).columns
-        for col in string_columns:
-            df[col] = df[col].astype(str).str.strip()
             
         return df
         
