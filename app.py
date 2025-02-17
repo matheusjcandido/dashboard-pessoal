@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 import logging
 import re
 
@@ -51,7 +50,7 @@ class DataLoader:
         """Extrai metadados do cabeçalho do arquivo"""
         try:
             # Lê as primeiras linhas para extrair metadados
-            header_lines = []
+            header_lines =
             for i in range(9):  # Lê as 9 linhas do cabeçalho
                 line = file.readline().decode('cp1252').strip()
                 header_lines.append(line)
@@ -59,12 +58,11 @@ class DataLoader:
             # Volta o arquivo ao início
             file.seek(0)
             
-            # Extrai data de pagamento
-            date_pattern = r'Data de pagamento :(\d{4}-\d{2}-\d{2})'
+            # Extrai data de pagamento diretamente da linha 5
+            date_pattern = r'Data de pagamento:(\d{4}-\d{2}-\d{2})'
             payment_date = None
-            for line in header_lines:
-                if match := re.search(date_pattern, line):
-                    payment_date = datetime.strptime(match.group(1), '%Y-%m-%d')
+            if match:= re.search(date_pattern, header_lines):
+                payment_date = datetime.strptime(match.group(1), '%Y-%m-%d')
             
             return {
                 'payment_date': payment_date,
@@ -82,16 +80,35 @@ class DataLoader:
             # Extrai metadados
             metadata = DataLoader.extract_metadata(file)
             
-            # Define tipos de dados para as colunas
+            # Define tipos de dados para todas as colunas
             dtype_dict = {
                 'ID': str,
                 'Nome': str,
                 'RG': str,
                 'CPF': str,
+                'Data Nascimento': str,
                 'Idade': str,  # Será convertido depois
                 'Órgão': str,
                 'Código da Unidade de Trabalho': str,
-                'Cargo': str
+                'Descrição da Unidade de Trabalho': str,
+                'Cargo': str,
+                'Função': str,
+                'Espec. Função': str,
+                'Data Início': str,
+                'Tipo Empregado': str,
+                'Tipo Provimento': str,
+                'Recebe Abono Permanência': str,
+                'Categoria do Trabalhador': str,
+                'Regime Trabalhista': str,
+                'Regime Previdenciário': str,
+                'Plano de Segregação da Massa': str,
+                'Sujeito ao Teto do RGPS': str,
+                'UF-Cidade': str
+            }
+
+            # Converte a coluna de idade para float e remove ','
+            converters = {
+                'Idade': lambda x: float(x.replace(',', '.'))
             }
             
             # Parse dates para estas colunas
@@ -124,6 +141,10 @@ class DataLoader:
     @staticmethod
     def _process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         """Processa e limpa o DataFrame"""
+        # Corrige o deslocamento de colunas causado por ';' extras
+        df['UF-Cidade'] = df['UF-Cidade'].str.replace('; ', ';', regex=False)
+        df['UF-Cidade'] = df['UF-Cidade'].str.replace(';;', ';', regex=False)
+
         # Remove linhas totalmente vazias
         df = df.dropna(how='all')
         
@@ -180,11 +201,11 @@ class ChartManager:
     def create_age_chart(df: pd.DataFrame, cargo_filter: Optional[str] = None) -> go.Figure:
         """Cria gráfico de distribuição de idade"""
         try:
-            if cargo_filter and cargo_filter != "Todos":
+            if cargo_filter and cargo_filter!= "Todos":
                 df = df[df['Cargo'] == cargo_filter]
             
             # Criar faixas etárias
-            bins = [17, 22, 27, 32, 37, 42, 47, 52, 57, 62]
+            bins =
             labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62']
             
             df['faixa_etaria'] = pd.cut(df['Idade'], bins=bins, labels=labels)
@@ -199,7 +220,7 @@ class ChartManager:
             ))
             
             fig.update_layout(
-                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter and cargo_filter != 'Todos' else ''}",
+                title=f"Distribuição por Idade{' - ' + cargo_filter if cargo_filter and cargo_filter!= 'Todos' else ''}",
                 xaxis_title="Faixa Etária",
                 yaxis_title="Quantidade",
                 showlegend=False,
@@ -261,14 +282,14 @@ class DashboardUI:
         
         st.markdown("""
             <style>
-            .main {
+          .main {
                 padding: 1rem;
             }
-            .stButton > button {
+          .stButton > button {
                 width: 100%;
                 padding: 0.3rem;
             }
-            .metric-container {
+          .metric-container {
                 background-color: #f0f2f6;
                 padding: 1rem;
                 border-radius: 0.5rem;
@@ -385,7 +406,7 @@ def main():
             DashboardUI.create_cargo_filters()
             
             # Aplicar filtro selecionado
-            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
+            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado!= "Todos":
                 df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
                 st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
             else:
