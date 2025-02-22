@@ -417,49 +417,44 @@ def main():
         uploaded_file = st.file_uploader("Upload de Dados", type="csv")
         
         if uploaded_file is not None:
-            try:
-                # Carrega os dados
-                df = DataLoader.load_data(uploaded_file)
-                
-                if df is not None and DataValidator.validate_dataframe(df):
-                    # Criar métricas resumidas
-                    DashboardUI.create_summary_metrics(df)
-                    
-                    # Criar filtros de cargo
-                    st.write("Filtrar por Posto/Graduação:")
-                    DashboardUI.create_cargo_filters()
-                    
-                    # Aplicar filtro selecionado
-                    if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
-                        df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
-                        st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
-                    else:
-                        df_filtered = df
-                        st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
-                    
-                    # Criar gráficos
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        fig_idade = ChartManager.create_age_chart(
-                            df_filtered,
-                            st.session_state.cargo_selecionado
-                        )
-                        if fig_idade:
-                            st.plotly_chart(fig_idade, use_container_width=True)
-                    
-                    with col2:
-                        fig_cargo = ChartManager.create_cargo_chart(df_filtered)
-                        if fig_cargo:
-                            st.plotly_chart(fig_cargo, use_container_width=True)
-                    
-                    # Exibir dados detalhados
-                    DashboardUI.display_detailed_data(df_filtered)
+            # Carrega os dados
+            df = DataLoader.load_data(uploaded_file)
             
-            except Exception as e:
-                logger.error(f"Erro ao processar dados filtrados: {str(e)}")
-                st.error("Erro ao processar dados filtrados")
-    
+            if df is not None and DataValidator.validate_dataframe(df):
+                # Criar métricas resumidas
+                DashboardUI.create_summary_metrics(df)
+                
+                # Criar filtros de cargo
+                st.write("Filtrar por Posto/Graduação:")
+                DashboardUI.create_cargo_filters()
+                
+                # Aplicar filtro selecionado
+                if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
+                    df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
+                    st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
+                else:
+                    df_filtered = df
+                    st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
+                
+                # Criar gráficos
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig_idade = ChartManager.create_age_chart(
+                        df_filtered,
+                        st.session_state.cargo_selecionado
+                    )
+                    if fig_idade:
+                        st.plotly_chart(fig_idade, use_container_width=True)
+                
+                with col2:
+                    fig_cargo = ChartManager.create_cargo_chart(df_filtered)
+                    if fig_cargo:
+                        st.plotly_chart(fig_cargo, use_container_width=True)
+                
+                # Exibir dados detalhados
+                DashboardUI.display_detailed_data(df_filtered)
+                
     except Exception as e:
         logger.error(f"Erro geral no dashboard: {str(e)}")
         st.error("Ocorreu um erro no dashboard")
