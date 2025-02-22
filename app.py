@@ -56,7 +56,7 @@ class DataLoader:
                 'RG': str,
                 'CPF': str,
                 'Data Nascimento': str,
-                'Idade': str,  # Será convertido depois
+                'Idade': str,
                 'Órgão': str,
                 'Código da Unidade de Trabalho': str,
                 'Descrição da Unidade de Trabalho': str,
@@ -75,24 +75,72 @@ class DataLoader:
                 'UF-Cidade': str
             }
 
-            # Carrega o CSV pulando linhas de metadados
+            # Carrega os dados
+            df = DataLoader.load_data(uploaded_file)
+            
+            if df is not None and DataValidator.validate_dataframe(df):
+                # Criar métricas resumidas
+                DashboardUI.create_summary_metrics(df)
+                
+                # Criar filtros de cargo
+                st.write("Filtrar por Posto/Graduação:")
+                DashboardUI.create_cargo_filters()
+                
+                try:
+                    # Aplicar filtro selecionado
+                    if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
+                        df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
+                        st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
+                    else:
+                        df_filtered = df
+                        st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
+                    
+                    # Criar gráficos
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        fig_idade = ChartManager.create_age_chart(
+                            df_filtered,
+                            st.session_state.cargo_selecionado
+                        )
+                        if fig_idade:
+                            st.plotly_chart(fig_idade, use_container_width=True)
+                    
+                    with col2:
+                        fig_cargo = ChartManager.create_cargo_chart(df_filtered)
+                        if fig_cargo:
+                            st.plotly_chart(fig_cargo, use_container_width=True)
+                    
+                    # Exibir dados detalhados
+                    DashboardUI.display_detailed_data(df_filtered)
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao processar dados filtrados: {str(e)}")
+                    st.error("Erro ao processar dados filtrados")
+    
+    except Exception as e:
+        logger.error(f"Erro geral no dashboard: {str(e)}")
+        st.error("Ocorreu um erro no dashboard")
+
+if __name__ == "__main__":
+    main()rega o CSV pulando linhas de metadados
             df = pd.read_csv(
                 file,
                 encoding='cp1252',
                 sep=';',
                 dtype=dtype_dict,
                 skiprows=7,
+                skipinitialspace=True,
                 on_bad_lines='skip'
             )
             
-            # Log das colunas disponíveis apenas no logger
-            logger.info(f"Colunas encontradas no arquivo: {df.columns.tolist()}")
+            logger.info(f"Dados carregados com sucesso. Dimensões: {df.shape}")
             
-            # Converte as colunas de data após carregar o DataFrame
-            date_columns = ['Data Nascimento', 'Data Início']
-            for col in date_columns:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+            # Remove linhas totalmente vazias
+            df = df.dropna(how='all')
+            
+            # Remove espaços extras dos nomes das colunas
+            df.columns = df.columns.str.strip()
             
             # Limpa e processa os dados
             df = DataLoader._process_dataframe(df)
@@ -108,44 +156,33 @@ class DataLoader:
     def _process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         """Processa e limpa o DataFrame"""
         try:
-            # Corrige o deslocamento de colunas causado por ';' extras
-            if 'UF-Cidade' in df.columns:
-                df['UF-Cidade'] = df['UF-Cidade'].str.replace('; ', ';', regex=False)
-                df['UF-Cidade'] = df['UF-Cidade'].str.replace(';;', ';', regex=False)
-
+            logger.info(f"Iniciando processamento. Linhas iniciais: {len(df)}")
+            
             # Remove linhas totalmente vazias
             df = df.dropna(how='all')
             
-            # Processa a coluna de idade
-            try:
-                if 'Idade' in df.columns:
-                    # Primeiro, limpa a coluna removendo espaços e substituindo vírgulas por pontos
-                    df['Idade'] = df['Idade'].astype(str).str.strip()
-                    df['Idade'] = df['Idade'].str.replace(',', '.')
-                    # Converte para numérico, tratando erros como NaN
-                    df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
-                    # Filtra idades válidas
-                    df = df[df['Idade'].between(18, 62, inclusive='both')]
-                else:
-                    logger.error("Coluna 'Idade' não encontrada no DataFrame")
-                    st.error("Coluna 'Idade' não encontrada nos dados")
-                    return None
-            except Exception as e:
-                logger.error(f"Erro ao processar coluna 'Idade': {str(e)}")
-                st.error(f"Erro ao processar coluna 'Idade': {str(e)}")
-                return None
+            # Limpa e padroniza as colunas de texto
+            text_columns = df.select_dtypes(include=['object']).columns
+            for col in text_columns:
+                df[col] = df[col].str.strip()
+                if col == 'Nome':
+                    df[col] = df[col].str.upper()
+            
+            # Processa a coluna de idade - já está como número no arquivo
+            if 'Idade' in df.columns:
+                df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+            
+            # Processa as datas
+            if 'Data Nascimento' in df.columns:
+                df['Data Nascimento'] = pd.to_datetime(df['Data Nascimento'], format='%d/%m/%Y', errors='coerce')
+            
+            if 'Data Início' in df.columns:
+                df['Data Início'] = pd.to_datetime(df['Data Início'], format='%d/%m/%Y', errors='coerce')
             
             # Limpa CPF (remove pontuação)
             df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
             
-            # Limpa espaços extras em colunas de texto
-            text_columns = df.select_dtypes(include=['object']).columns
-            for col in text_columns:
-                df[col] = df[col].str.strip()
-            
-            # Garante ordem das colunas conforme esperado
-            expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
-            df = df[expected_cols]
+            logger.info(f"Processamento concluído. Linhas finais: {len(df)}")
             
             return df
         except Exception as e:
@@ -169,14 +206,10 @@ class DataValidator:
             st.error(f"Colunas obrigatórias faltando: {missing_columns}")
             return False
             
-        # Verifica valores únicos em colunas chave
-        if df['CPF'].duplicated().any():
-            st.warning("Existem CPFs duplicados nos dados")
-            
-        # Verifica distribuição de idades
-        idade_stats = df['Idade'].describe()
-        if idade_stats['min'] < 18 or idade_stats['max'] > 62:
-            st.warning("Existem idades fora do intervalo esperado (18-62)")
+        # Verifica se há dados
+        if df.empty:
+            st.error("Nenhum dado encontrado após processamento")
+            return False
             
         return True
 
@@ -224,10 +257,12 @@ class ChartManager:
     def create_cargo_chart(df: pd.DataFrame) -> go.Figure:
         """Cria gráfico de distribuição por cargo"""
         try:
+            # Filtrar apenas cargos válidos
+            cargos_validos = [c for c in ORDEM_CARGOS if c != "Todos"]
             cargo_counts = df['Cargo'].value_counts()
-            cargo_counts = cargo_counts.reindex(
-                [cargo for cargo in ORDEM_CARGOS if cargo in cargo_counts.index]
-            )
+            
+            # Reordenar conforme ORDEM_CARGOS
+            cargo_counts = cargo_counts.reindex([c for c in cargos_validos if c in cargo_counts.index])
             
             fig = go.Figure(go.Bar(
                 x=cargo_counts.values,
@@ -351,11 +386,14 @@ class DashboardUI:
             'Recebe Abono Permanência'
         ]
         
-        # Formata as colunas de data
+        # Formata as colunas de data e CPF
         df_display = df[display_columns].copy()
         date_columns = ['Data Nascimento', 'Data Início']
         for col in date_columns:
             df_display[col] = pd.to_datetime(df_display[col]).dt.strftime('%d/%m/%Y')
+            
+        # Formata CPF com máscara
+        df_display['CPF'] = df_display['CPF'].apply(lambda x: f"{x[:3]}.{x[3:6]}.{x[6:9]}-{x[9:]}" if len(x) == 11 else x)
         
         # Exibe o DataFrame
         st.dataframe(df_display, use_container_width=True, height=400)
@@ -379,7 +417,7 @@ def main():
         uploaded_file = st.file_uploader("Upload de Dados", type="csv")
         
         if uploaded_file is not None:
-            # Carrega os dados
+            # Car# Carrega os dados
             df = DataLoader.load_data(uploaded_file)
             
             if df is not None and DataValidator.validate_dataframe(df):
