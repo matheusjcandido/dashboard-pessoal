@@ -50,31 +50,8 @@ class DataLoader:
         """Carrega e processa o arquivo CSV"""
         try:
             # Define tipos de dados para todas as colunas
-            dtype_dict = {
-                'ID': str,
-                'Nome': str,
-                'RG': str,
-                'CPF': str,
-                'Data Nascimento': str,
-                'Idade': str,
-                'Órgão': str,
-                'Código da Unidade de Trabalho': str,
-                'Descrição da Unidade de Trabalho': str,
-                'Cargo': str,
-                'Função': str,
-                'Espec. Função': str,
-                'Data Início': str,
-                'Tipo Empregado': str,
-                'Tipo Provimento': str,
-                'Recebe Abono Permanência': str,
-                'Categoria do Trabalhador': str,
-                'Regime Trabalhista': str,
-                'Regime Previdenciário': str,
-                'Plano de Segregação da Massa': str,
-                'Sujeito ao Teto do RGPS': str,
-                'UF-Cidade': str
-            }
-
+            dtype_dict = {col: str for col in DataLoader.EXPECTED_COLUMNS}
+            
             # Carrega o CSV pulando linhas de metadados
             df = pd.read_csv(
                 file,
@@ -120,9 +97,18 @@ class DataLoader:
                 if col == 'Nome':
                     df[col] = df[col].str.upper()
             
-            # Processa a coluna de idade - já está como número no arquivo
+            # Processa a coluna de idade
             if 'Idade' in df.columns:
+                logger.info(f"Valores únicos em Idade antes do processamento: {df['Idade'].unique()}")
+                # Primeiro converte para string para garantir o tratamento correto
+                df['Idade'] = df['Idade'].astype(str)
+                # Remove espaços e substitui vírgula por ponto
+                df['Idade'] = df['Idade'].str.strip().str.replace(',', '.')
+                # Converte para numérico
                 df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+                # Remove idades inválidas
+                df = df[df['Idade'].notna()]
+                logger.info(f"Range de idades após processamento: {df['Idade'].min()} - {df['Idade'].max()}")
             
             # Processa as datas
             if 'Data Nascimento' in df.columns:
@@ -371,8 +357,8 @@ def main():
         if uploaded_file is not None:
             # Carrega os dados
             df = DataLoader.load_data(uploaded_file)
-
-        if df is not None and DataValidator.validate_dataframe(df):
+            
+            if df is not None and DataValidator.validate_dataframe(df):
                 # Criar métricas resumidas
                 DashboardUI.create_summary_metrics(df)
                 
