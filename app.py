@@ -75,13 +75,13 @@ class DataLoader:
                 'UF-Cidade': str
             }
 
-            # Carrega o CSV sem processamento específico
+            # Carrega o CSV pulando linhas de metadados
             df = pd.read_csv(
                 file,
                 encoding='cp1252',
                 sep=';',
-                skiprows=7,
                 dtype=dtype_dict,
+                skiprows=7,
                 on_bad_lines='skip'
             )
             
@@ -288,7 +288,7 @@ class DashboardUI:
     @staticmethod
     def create_summary_metrics(df: pd.DataFrame):
         """Cria métricas resumidas"""
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric(
@@ -300,6 +300,12 @@ class DashboardUI:
             st.metric(
                 "Idade Média",
                 f"{df['Idade'].mean():.1f} anos"
+            )
+            
+        with col3:
+            st.metric(
+                "Quantidade de Unidades",
+                f"{df['Descrição da Unidade de Trabalho'].nunique()}"
             )
 
     @staticmethod
@@ -366,50 +372,60 @@ class DashboardUI:
 
 def main():
     """Função principal do dashboard"""
-    DashboardUI.setup_page()
-    
-    st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
-    
-    uploaded_file = st.file_uploader("Upload de Dados", type="csv")
-    
-    if uploaded_file is not None:
-        # Carrega os dados
-        df = DataLoader.load_data(uploaded_file)
+    try:
+        DashboardUI.setup_page()
         
-        if df is not None and DataValidator.validate_dataframe(df):
-            # Criar métricas resumidas
-            DashboardUI.create_summary_metrics(df)
+        st.title("Dashboard - Corpo de Bombeiros Militar do Paraná")
+        
+        uploaded_file = st.file_uploader("Upload de Dados", type="csv")
+        
+        if uploaded_file is not None:
+            # Carrega os dados
+            df = DataLoader.load_data(uploaded_file)
             
-            # Criar filtros de cargo
-            st.write("Filtrar por Posto/Graduação:")
-            DashboardUI.create_cargo_filters()
-            
-            # Aplicar filtro selecionado
-            if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
-                df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
-                st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
-            else:
-                df_filtered = df
-                st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
-            
-            # Criar gráficos
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig_idade = ChartManager.create_age_chart(
-                    df_filtered,
-                    st.session_state.cargo_selecionado
-                )
-                if fig_idade:
-                    st.plotly_chart(fig_idade, use_container_width=True)
-            
-            with col2:
-                fig_cargo = ChartManager.create_cargo_chart(df_filtered)
-                if fig_cargo:
-                    st.plotly_chart(fig_cargo, use_container_width=True)
-            
-            # Exibir dados detalhados
-            DashboardUI.display_detailed_data(df_filtered)
+            if df is not None and DataValidator.validate_dataframe(df):
+                # Criar métricas resumidas
+                DashboardUI.create_summary_metrics(df)
+                
+                # Criar filtros de cargo
+                st.write("Filtrar por Posto/Graduação:")
+                DashboardUI.create_cargo_filters()
+                
+                try:
+                    # Aplicar filtro selecionado
+                    if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
+                        df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
+                        st.header(f"Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f}".replace(",", "."))
+                    else:
+                        df_filtered = df
+                        st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
+                    
+                    # Criar gráficos
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        fig_idade = ChartManager.create_age_chart(
+                            df_filtered,
+                            st.session_state.cargo_selecionado
+                        )
+                        if fig_idade:
+                            st.plotly_chart(fig_idade, use_container_width=True)
+                    
+                    with col2:
+                        fig_cargo = ChartManager.create_cargo_chart(df_filtered)
+                        if fig_cargo:
+                            st.plotly_chart(fig_cargo, use_container_width=True)
+                    
+                    # Exibir dados detalhados
+                    DashboardUI.display_detailed_data(df_filtered)
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao processar dados filtrados: {str(e)}")
+                    st.error("Erro ao processar dados filtrados")
+    
+    except Exception as e:
+        logger.error(f"Erro geral no dashboard: {str(e)}")
+        st.error("Ocorreu um erro no dashboard")
 
 if __name__ == "__main__":
     main()
