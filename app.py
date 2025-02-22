@@ -371,8 +371,8 @@ def main():
         if uploaded_file is not None:
             # Carrega os dados
             df = DataLoader.load_data(uploaded_file)
-            
-           if df is not None and DataValidator.validate_dataframe(df):
+
+        if df is not None and DataValidator.validate_dataframe(df):
                 # Criar métricas resumidas
                 DashboardUI.create_summary_metrics(df)
                 
