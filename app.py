@@ -84,7 +84,7 @@ def load_data(file):
         
         # Primeiro, vamos tentar ler o arquivo usando um parser mais robusto
         df = pd.read_csv(file, encoding='cp1252', 
-                         skiprows=7,  # Pula o cabeçalho inicial
+                         skiprows=9,  # Pula o cabeçalho inicial
                          header=None,   
                          names=column_names, # Define os nomes das colunas
                          sep=';',     # Especifica o separador
