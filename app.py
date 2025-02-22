@@ -110,13 +110,6 @@ class DataLoader:
                 df = df[df['Idade'].notna()]
                 logger.info(f"Range de idades após processamento: {df['Idade'].min()} - {df['Idade'].max()}")
             
-            # Processa as datas
-            if 'Data Nascimento' in df.columns:
-                df['Data Nascimento'] = pd.to_datetime(df['Data Nascimento'], format='%d/%m/%Y', errors='coerce')
-            
-            if 'Data Início' in df.columns:
-                df['Data Início'] = pd.to_datetime(df['Data Início'], format='%d/%m/%Y', errors='coerce')
-            
             # Limpa CPF (remove pontuação)
             df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
             
@@ -324,12 +317,9 @@ class DashboardUI:
             'Recebe Abono Permanência'
         ]
         
-        # Formata as colunas de data e CPF
+        # Cria cópia para exibição
         df_display = df[display_columns].copy()
-        date_columns = ['Data Nascimento', 'Data Início']
-        for col in date_columns:
-            df_display[col] = pd.to_datetime(df_display[col]).dt.strftime('%d/%m/%Y')
-            
+        
         # Formata CPF com máscara
         df_display['CPF'] = df_display['CPF'].apply(lambda x: f"{x[:3]}.{x[3:6]}.{x[6:9]}-{x[9:]}" if len(x) == 11 else x)
         
@@ -373,8 +363,7 @@ def main():
                 else:
                     df_filtered = df
                     st.header(f"Efetivo Total: {len(df):,.0f}".replace(",", "."))
-                
-                # Criar gráficos
+                    # Criar gráficos
                 col1, col2 = st.columns(2)
                 
                 with col1:
