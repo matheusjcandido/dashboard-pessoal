@@ -417,18 +417,18 @@ def main():
         uploaded_file = st.file_uploader("Upload de Dados", type="csv")
         
         if uploaded_file is not None:
-            # Car# Carrega os dados
-            df = DataLoader.load_data(uploaded_file)
-            
-            if df is not None and DataValidator.validate_dataframe(df):
-                # Criar métricas resumidas
-                DashboardUI.create_summary_metrics(df)
+            try:
+                # Carrega os dados
+                df = DataLoader.load_data(uploaded_file)
                 
-                # Criar filtros de cargo
-                st.write("Filtrar por Posto/Graduação:")
-                DashboardUI.create_cargo_filters()
-                
-                try:
+                if df is not None and DataValidator.validate_dataframe(df):
+                    # Criar métricas resumidas
+                    DashboardUI.create_summary_metrics(df)
+                    
+                    # Criar filtros de cargo
+                    st.write("Filtrar por Posto/Graduação:")
+                    DashboardUI.create_cargo_filters()
+                    
                     # Aplicar filtro selecionado
                     if st.session_state.cargo_selecionado and st.session_state.cargo_selecionado != "Todos":
                         df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
@@ -455,10 +455,10 @@ def main():
                     
                     # Exibir dados detalhados
                     DashboardUI.display_detailed_data(df_filtered)
-                    
-                except Exception as e:
-                    logger.error(f"Erro ao processar dados filtrados: {str(e)}")
-                    st.error("Erro ao processar dados filtrados")
+            
+            except Exception as e:
+                logger.error(f"Erro ao processar dados filtrados: {str(e)}")
+                st.error("Erro ao processar dados filtrados")
     
     except Exception as e:
         logger.error(f"Erro geral no dashboard: {str(e)}")
