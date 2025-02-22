@@ -85,9 +85,8 @@ class DataLoader:
                 on_bad_lines='skip'
             )
             
-            # Log das colunas disponíveis
+            # Log das colunas disponíveis apenas no logger
             logger.info(f"Colunas encontradas no arquivo: {df.columns.tolist()}")
-            st.write("Colunas encontradas no arquivo:", df.columns.tolist())
             
             # Converte as colunas de data após carregar o DataFrame
             date_columns = ['Data Nascimento', 'Data Início']
