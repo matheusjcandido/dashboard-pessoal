@@ -80,6 +80,7 @@ class DataLoader:
                 file,
                 encoding='cp1252',
                 sep=';',
+                skiprows=7,
                 dtype=dtype_dict,
                 on_bad_lines='skip'
             )
