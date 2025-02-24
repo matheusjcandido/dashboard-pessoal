@@ -176,29 +176,54 @@ class DataLoader:
                         if pd.api.types.is_datetime64_any_dtype(df['Data Início']):
                             # Calcula diferença em dias e converte para anos
                             hoje = pd.Timestamp(datetime.now())
-                            df['Tempo de Serviço (Anos)'] = df['Data Início'].apply(
-                                lambda x: (hoje - x).days / 365.25 if pd.notnull(x) else None
-                            ).round(1)
+                            
+                            # Função segura para calcular a diferença
+                            def calc_service_time(x):
+                                if pd.notnull(x):
+                                    try:
+                                        # Garante que x é datetime64
+                                        if isinstance(x, (pd.Timestamp, np.datetime64)):
+                                            delta_days = (hoje - x).days
+                                            return delta_days / 365.25 if delta_days >= 0 else 0
+                                        else:
+                                            return 0
+                                    except:
+                                        return 0
+                                else:
+                                    return 0
+                            
+                            # Aplica a função e arredonda
+                            df.loc[:, 'Tempo de Serviço (Anos)'] = df['Data Início'].apply(calc_service_time).round(1)
                         else:
                             # Se não for do tipo datetime, tenta converter novamente
-                            df['Data Início'] = pd.to_datetime(df['Data Início'], errors='coerce')
+                            date_series = pd.to_datetime(df['Data Início'], errors='coerce')
                             
                             # Verifica se a conversão foi bem-sucedida
-                            if not pd.isna(df['Data Início']).all():
+                            if not pd.isna(date_series).all():
                                 hoje = pd.Timestamp(datetime.now())
-                                df['Tempo de Serviço (Anos)'] = df['Data Início'].apply(
-                                    lambda x: (hoje - x).days / 365.25 if pd.notnull(x) else None
-                                ).round(1)
+                                
+                                # Função segura para calcular a diferença
+                                def calc_service_time(x):
+                                    if pd.notnull(x):
+                                        try:
+                                            delta_days = (hoje - x).days
+                                            return delta_days / 365.25 if delta_days >= 0 else 0
+                                        except:
+                                            return 0
+                                    else:
+                                        return 0
+                                
+                                df.loc[:, 'Tempo de Serviço (Anos)'] = date_series.apply(calc_service_time).round(1)
                             else:
                                 logger.warning("Não foi possível converter 'Data Início' para calcular tempo de serviço")
-                                df['Tempo de Serviço (Anos)'] = np.nan
+                                df.loc[:, 'Tempo de Serviço (Anos)'] = 0
                                 
                         # Limita os valores e preenche os NaN
-                        df['Tempo de Serviço (Anos)'] = df['Tempo de Serviço (Anos)'].fillna(0).clip(0, 40)
+                        df.loc[:, 'Tempo de Serviço (Anos)'] = df['Tempo de Serviço (Anos)'].fillna(0).clip(0, 40)
                         
                     except Exception as e:
-                        logger.error(f"Erro ao calcular tempo de serviço: {str(e)}")
-                        df['Tempo de Serviço (Anos)'] = np.nan
+                        logger.error(f"Erro ao calcular tempo de serviço: {str(e)}", exc_info=True)
+                        df.loc[:, 'Tempo de Serviço (Anos)'] = 0
                 
                 return df
                 
@@ -222,8 +247,9 @@ class DataLoader:
             # Corrige deslocamento de colunas e formatos
             for col in df.columns:
                 if isinstance(df[col].iloc[0], str):
-                    df[col] = df[col].str.replace('; ', ';', regex=False)
-                    df[col] = df[col].str.replace(';;', ';', regex=False)
+                    # Usa método loc para modificar colunas
+                    df.loc[:, col] = df[col].str.replace('; ', ';', regex=False)
+                    df.loc[:, col] = df[col].str.replace(';;', ';', regex=False)
 
             # Remove linhas totalmente vazias
             df = df.dropna(how='all')
@@ -232,10 +258,10 @@ class DataLoader:
             try:
                 if 'Idade' in df.columns:
                     # Limpa a coluna removendo espaços e substituindo vírgulas por pontos
-                    df['Idade'] = df['Idade'].astype(str).str.strip()
-                    df['Idade'] = df['Idade'].str.replace(',', '.')
+                    df.loc[:, 'Idade'] = df['Idade'].astype(str).str.strip()
+                    df.loc[:, 'Idade'] = df['Idade'].str.replace(',', '.')
                     # Converte para numérico, tratando erros como NaN
-                    df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+                    df.loc[:, 'Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
                     # Filtra idades válidas
                     df = df[df['Idade'].between(18, 62, inclusive='both')]
                 else:
@@ -248,27 +274,30 @@ class DataLoader:
                 return None
             
             # Limpa CPF (remove pontuação)
-            df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
+            df.loc[:, 'CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
             
             # Adiciona formato visual para CPF
-            df['CPF_formatado'] = df['CPF'].apply(
+            df.loc[:, 'CPF_formatado'] = df['CPF'].apply(
                 lambda x: f"{x[:3]}.{x[3:6]}.{x[6:9]}-{x[9:]}" if len(x) == 11 else x
             )
             
             # Limpa espaços extras em colunas de texto
             text_columns = df.select_dtypes(include=['object']).columns
             for col in text_columns:
-                df[col] = df[col].str.strip()
+                df.loc[:, col] = df[col].str.strip()
             
             # Extrai cidade da coluna UF-Cidade
             if 'UF-Cidade' in df.columns:
                 try:
                     # Padrão esperado: "PR-CURITIBA"
-                    df[['UF', 'Cidade']] = df['UF-Cidade'].str.split('-', n=1, expand=True)
-                except:
+                    cidade_split = df['UF-Cidade'].str.split('-', n=1, expand=True)
+                    df.loc[:, 'UF'] = cidade_split[0]
+                    df.loc[:, 'Cidade'] = cidade_split[1]
+                except Exception as e:
+                    logger.warning(f"Erro ao separar UF-Cidade: {str(e)}")
                     # Fallback caso o padrão não seja consistente
-                    df['UF'] = 'PR'  # Assume PR como padrão
-                    df['Cidade'] = df['UF-Cidade'].copy()
+                    df.loc[:, 'UF'] = 'PR'  # Assume PR como padrão
+                    df.loc[:, 'Cidade'] = df['UF-Cidade'].copy()
             
             # Garante ordem das colunas conforme esperado
             expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
@@ -295,8 +324,11 @@ class DataProcessor:
         Returns:
             DataFrame com coluna 'faixa_etaria' adicionada
         """
+        # Cria uma cópia explícita para evitar SettingWithCopyWarning
         df_copy = df.copy()
-        df_copy['faixa_etaria'] = pd.cut(
+        
+        # Adiciona a coluna de faixa etária usando .loc
+        df_copy.loc[:, 'faixa_etaria'] = pd.cut(
             df_copy['Idade'], 
             bins=FAIXAS_ETARIAS['bins'], 
             labels=FAIXAS_ETARIAS['labels']
@@ -345,11 +377,18 @@ class DataProcessor:
         Returns:
             DataFrame com candidatos à aposentadoria
         """
-        cond_idade = df['Idade'] > 50
-        cond_abono = df.get('Recebe Abono Permanência', 'NÃO').str.upper() == 'SIM'
+        # Cria uma cópia explícita para evitar SettingWithCopyWarning
+        candidates = df.copy()
         
-        candidates = df[cond_idade | cond_abono].copy()
-        candidates['Motivo'] = 'Idade > 50'
+        # Aplica as condições
+        cond_idade = candidates['Idade'] > 50
+        cond_abono = candidates.get('Recebe Abono Permanência', 'NÃO').str.upper() == 'SIM'
+        
+        # Filtra candidatos
+        candidates = candidates[cond_idade | cond_abono].copy()
+        
+        # Adiciona a coluna de motivo usando .loc para evitar avisos
+        candidates.loc[:, 'Motivo'] = 'Idade > 50'
         candidates.loc[cond_abono, 'Motivo'] = 'Recebe Abono'
         candidates.loc[cond_idade & cond_abono, 'Motivo'] = 'Ambos'
         
@@ -635,12 +674,16 @@ class ChartManager:
                 logger.error("Coluna 'Tempo de Serviço (Anos)' não encontrada")
                 return None
                 
+            # Cria uma cópia para evitar SettingWithCopyWarning
+            df_temp = df.copy()
+                
             # Cria bins para tempo de serviço
             bins = [0, 5, 10, 15, 20, 25, 30, 35, 40]
             labels = ['0-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35-40']
             
-            df['faixa_tempo'] = pd.cut(df['Tempo de Serviço (Anos)'], bins=bins, labels=labels)
-            tempo_counts = df['faixa_tempo'].value_counts().sort_index()
+            # Usa loc para adicionar a nova coluna
+            df_temp.loc[:, 'faixa_tempo'] = pd.cut(df_temp['Tempo de Serviço (Anos)'], bins=bins, labels=labels)
+            tempo_counts = df_temp['faixa_tempo'].value_counts().sort_index()
             
             # Gráfico com Plotly Express para melhor visualização
             fig = px.bar(
@@ -672,8 +715,8 @@ class ChartManager:
             )
             
             # Adiciona estatísticas no gráfico
-            stats_text = f"<b>Média: {df['Tempo de Serviço (Anos)'].mean():.1f} anos</b><br>"
-            stats_text += f"<b>Mediana: {df['Tempo de Serviço (Anos)'].median():.1f} anos</b>"
+            stats_text = f"<b>Média: {df_temp['Tempo de Serviço (Anos)'].mean():.1f} anos</b><br>"
+            stats_text += f"<b>Mediana: {df_temp['Tempo de Serviço (Anos)'].median():.1f} anos</b>"
             
             fig.add_annotation(
                 x=0.02,
@@ -1033,20 +1076,20 @@ class DashboardUI:
                 try:
                     # Verifica se a coluna é do tipo datetime antes de usar .dt
                     if pd.api.types.is_datetime64_any_dtype(df_paginated[col]):
-                        df_paginated[col] = df_paginated[col].dt.strftime('%d/%m/%Y')
+                        df_paginated.loc[:, col] = df_paginated[col].dt.strftime('%d/%m/%Y')
                     else:
                         # Tenta converter para datetime
                         temp = pd.to_datetime(df_paginated[col], errors='coerce')
                         # Se a conversão funcionar, formata a data
                         if not pd.isna(temp).all():
-                            df_paginated[col] = temp.dt.strftime('%d/%m/%Y')
+                            df_paginated.loc[:, col] = temp.dt.strftime('%d/%m/%Y')
                 except Exception as e:
                     logger.warning(f"Erro ao formatar coluna de data {col}: {str(e)}")
                     # Mantém a coluna como está se houver erro
             
-            # Substitui CPF pela versão formatada se disponível
+            # Substituições específicas para exibição
             if 'CPF_formatado' in df_paginated.columns and 'CPF' in display_columns:
-                df_paginated['CPF'] = df_paginated['CPF_formatado']
+                df_paginated.loc[:, 'CPF'] = df_paginated['CPF_formatado']
             
             # Exibe o DataFrame com estatísticas
             st.markdown('<div class="dataframe-container">', unsafe_allow_html=True)
