@@ -1238,88 +1238,92 @@ def main():
                     df = DataLoader.load_data(uploaded_file)
                 
                 if df is not None and DataValidator.validate_dataframe(df):
-                # Criar métricas resumidas
-                DashboardUI.create_summary_metrics(df)
+                    # Criar métricas resumidas
+                    DashboardUI.create_summary_metrics(df)
+                    
+                    # Criar filtros de cargo
+                    DashboardUI.create_cargo_filters()
                 
-                # Criar filtros de cargo
-                DashboardUI.create_cargo_filters()
-                
-                try:
-                    # Aplicar filtro selecionado
-                    if (hasattr(st.session_state, 'cargo_selecionado') and 
-                        st.session_state.cargo_selecionado and 
-                        st.session_state.cargo_selecionado != "Todos"):
-                        
-                        df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
-                        st.markdown(
-                            f"<h3 class='subheader'>📊 Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f} ({len(df_filtered)/len(df)*100:.1f}%)</h3>".replace(",", "."), 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        df_filtered = df
-                        st.markdown(
-                            f"<h3 class='subheader'>📊 Efetivo Total: {len(df):,.0f}</h3>".replace(",", "."), 
-                            unsafe_allow_html=True
-                        )
-                    
-                    # Criar gráficos em guias
-                    tabs = st.tabs(["📈 Distribuição de Idade", "👮 Postos e Graduações", "🏢 Unidades", "⏱️ Tempo de Serviço"])
-                    
-                    with tabs[0]:
-                        fig_idade = ChartManager.create_age_chart(
-                            df_filtered,
-                            st.session_state.cargo_selecionado if hasattr(st.session_state, 'cargo_selecionado') else None
-                        )
-                        if fig_idade:
-                            st.plotly_chart(fig_idade, use_container_width=True)
-                    
-                    with tabs[1]:
-                        fig_cargo = ChartManager.create_cargo_chart(df_filtered)
-                        if fig_cargo:
-                            selected_points = plotly_events(fig_cargo, click_event=True)
+                    try:
+                        # Aplicar filtro selecionado
+                        if (hasattr(st.session_state, 'cargo_selecionado') and 
+                            st.session_state.cargo_selecionado and 
+                            st.session_state.cargo_selecionado != "Todos"):
                             
-                            # Permite clicar em um cargo para filtrar
-                            if selected_points:
-                                if 'y' in selected_points[0]:
-                                    cargo_index = int(selected_points[0]['pointIndex'])
-                                    cargo_selecionado = fig_cargo.data[0].y[cargo_index]
-                                    st.session_state.cargo_selecionado = cargo_selecionado
-                                    st.experimental_rerun()
-                    
-                    with tabs[2]:
-                        fig_unit = ChartManager.create_unit_chart(df_filtered)
-                        if fig_unit:
-                            st.plotly_chart(fig_unit, use_container_width=True)
-                            
-                            # Tabela com dados agregados por unidade
-                            unit_data = DataProcessor.aggregate_by_unit(df_filtered)
-                            if not unit_data.empty:
-                                st.markdown("### Detalhamento por Unidade")
-                                st.dataframe(
-                                    unit_data,
-                                    use_container_width=True,
-                                    height=300,
-                                    hide_index=True
-                                )
-                    
-                    with tabs[3]:
-                        if 'Data Início' in df.columns:
-                            fig_service = ChartManager.create_service_time_chart(df_filtered)
-                            if fig_service:
-                                st.plotly_chart(fig_service, use_container_width=True)
+                            df_filtered = df[df['Cargo'] == st.session_state.cargo_selecionado]
+                            st.markdown(
+                                f"<h3 class='subheader'>📊 Efetivo Filtrado: {len(df_filtered):,.0f} de {len(df):,.0f} ({len(df_filtered)/len(df)*100:.1f}%)</h3>".replace(",", "."), 
+                                unsafe_allow_html=True
+                            )
                         else:
-                            st.warning("Dados de tempo de serviço não disponíveis. A coluna 'Data Início' não foi encontrada no arquivo.")
+                            df_filtered = df
+                            st.markdown(
+                                f"<h3 class='subheader'>📊 Efetivo Total: {len(df):,.0f}</h3>".replace(",", "."), 
+                                unsafe_allow_html=True
+                            )
                     
-                    # Exibir dados detalhados
-                    DashboardUI.display_detailed_data(df_filtered)
+                        # Criar gráficos em guias
+                        tabs = st.tabs(["📈 Distribuição de Idade", "👮 Postos e Graduações", "🏢 Unidades", "⏱️ Tempo de Serviço"])
+                        
+                        with tabs[0]:
+                            fig_idade = ChartManager.create_age_chart(
+                                df_filtered,
+                                st.session_state.cargo_selecionado if hasattr(st.session_state, 'cargo_selecionado') else None
+                            )
+                            if fig_idade:
+                                st.plotly_chart(fig_idade, use_container_width=True)
+                        
+                        with tabs[1]:
+                            fig_cargo = ChartManager.create_cargo_chart(df_filtered)
+                            if fig_cargo:
+                                selected_points = plotly_events(fig_cargo, click_event=True)
+                                
+                                # Permite clicar em um cargo para filtrar
+                                if selected_points:
+                                    if 'y' in selected_points[0]:
+                                        cargo_index = int(selected_points[0]['pointIndex'])
+                                        cargo_selecionado = fig_cargo.data[0].y[cargo_index]
+                                        st.session_state.cargo_selecionado = cargo_selecionado
+                                        st.experimental_rerun()
+                        
+                        with tabs[2]:
+                            fig_unit = ChartManager.create_unit_chart(df_filtered)
+                            if fig_unit:
+                                st.plotly_chart(fig_unit, use_container_width=True)
+                                
+                                # Tabela com dados agregados por unidade
+                                unit_data = DataProcessor.aggregate_by_unit(df_filtered)
+                                if not unit_data.empty:
+                                    st.markdown("### Detalhamento por Unidade")
+                                    st.dataframe(
+                                        unit_data,
+                                        use_container_width=True,
+                                        height=300,
+                                        hide_index=True
+                                    )
+                        
+                        with tabs[3]:
+                            if 'Data Início' in df.columns:
+                                fig_service = ChartManager.create_service_time_chart(df_filtered)
+                                if fig_service:
+                                    st.plotly_chart(fig_service, use_container_width=True)
+                            else:
+                                st.warning("Dados de tempo de serviço não disponíveis. A coluna 'Data Início' não foi encontrada no arquivo.")
+                        
+                        # Exibir dados detalhados
+                        DashboardUI.display_detailed_data(df_filtered)
+                        
+                        # Exibe tempo de processamento
+                        processing_time = time.time() - start_time
+                        st.caption(f"Dashboard carregado em {processing_time:.2f} segundos | Dados atualizados em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
                     
-                    # Exibe tempo de processamento
-                    processing_time = time.time() - start_time
-                    st.caption(f"Dashboard carregado em {processing_time:.2f} segundos | Dados atualizados em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-                    
-                except Exception as e:
-                    logger.error(f"Erro ao processar dados filtrados: {str(e)}", exc_info=True)
-                    st.error(f"Erro ao processar dados filtrados: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"Erro ao processar dados filtrados: {str(e)}", exc_info=True)
+                        st.error(f"Erro ao processar dados filtrados: {str(e)}")
+                        
+                        # Exibe o rastreamento da exceção para facilitar a depuração
+                        with st.expander("Detalhes técnicos do erro"):
+                            st.code(traceback.format_exc())
             except Exception as e:
                 # Captura erros específicos durante o carregamento
                 logger.error(f"Erro ao processar o arquivo: {str(e)}", exc_info=True)
