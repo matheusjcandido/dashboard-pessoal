@@ -5,6 +5,7 @@ import plotly.express as px
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import logging
+import numpy as np
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
