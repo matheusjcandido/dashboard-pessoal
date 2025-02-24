@@ -396,7 +396,7 @@ class DashboardUI:
             abono_options,
             index=0
         )
-        
+         
         # Filtro por Unidade de Trabalho
         unidades = ["Todas"] + DataFilter.get_unique_values(df, 'Descrição da Unidade de Trabalho')
         unidade_filter = st.sidebar.selectbox(
