@@ -122,9 +122,8 @@ class DataLoader:
                             skiprows=7,
                             on_bad_lines='skip',
                             keep_default_na=True,
-                            skipinitialspace=True,
-                            engine='python',  # Mais flexível para formatos não padrão
-                            low_memory=False  # Evita erros de tipagem mista em colunas
+                            skipinitialspace=True
+                            # Nota: não usar low_memory e engine='python' juntos - eles são incompatíveis
                         )
                         
                         logger.info(f"Arquivo CSV carregado com sucesso usando encoding {encoding}")
