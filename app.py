@@ -12,6 +12,7 @@ import time
 import os
 import base64
 from io import BytesIO
+import traceback
 
 # Configuração de logging
 logging.basicConfig(
@@ -141,26 +142,63 @@ class DataLoader:
                 date_columns = ['Data Nascimento', 'Data Início']
                 for col in date_columns:
                     if col in df.columns:
-                        # Detecta o formato da data
-                        if df[col].iloc[0].count('/') == 2:
-                            df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
-                        else:
-                            # Tenta outros formatos comuns
-                            date_formats = ['%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']
-                            for fmt in date_formats:
-                                try:
-                                    df[col] = pd.to_datetime(df[col], format=fmt, errors='raise')
-                                    break
-                                except:
-                                    continue
+                        try:
+                            # Primeiro, tenta verificar o formato analisando a primeira célula não nula
+                            sample_value = df[col].dropna().iloc[0] if not df[col].dropna().empty else ""
+                            
+                            # Detecta o formato da data
+                            if isinstance(sample_value, str) and '/' in sample_value and sample_value.count('/') == 2:
+                                df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+                            else:
+                                # Tenta outros formatos comuns
+                                date_formats = ['%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y']
+                                for fmt in date_formats:
+                                    try:
+                                        df[col] = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                                        # Verifica se a conversão foi bem-sucedida
+                                        if not pd.isna(df[col]).all():
+                                            logger.info(f"Coluna {col} convertida com formato {fmt}")
+                                            break
+                                    except:
+                                        continue
+                        except Exception as e:
+                            logger.warning(f"Não foi possível converter coluna {col} para datetime: {str(e)}")
+                            # Garante que a coluna existe mas como objeto string, não como datetime
+                            df[col] = df[col].astype(str)
                 
                 # Limpa e processa os dados
                 df = DataLoader._process_dataframe(df)
                 
                 # Tempo de serviço - calcula usando a data atual e Data Início
                 if 'Data Início' in df.columns:
-                    df['Tempo de Serviço (Anos)'] = ((datetime.now() - df['Data Início']).dt.days / 365.25).round(1)
-                    df['Tempo de Serviço (Anos)'] = df['Tempo de Serviço (Anos)'].fillna(0).clip(0, 40)
+                    try:
+                        # Verifica se a coluna Data Início é realmente do tipo datetime
+                        if pd.api.types.is_datetime64_any_dtype(df['Data Início']):
+                            # Calcula diferença em dias e converte para anos
+                            hoje = pd.Timestamp(datetime.now())
+                            df['Tempo de Serviço (Anos)'] = df['Data Início'].apply(
+                                lambda x: (hoje - x).days / 365.25 if pd.notnull(x) else None
+                            ).round(1)
+                        else:
+                            # Se não for do tipo datetime, tenta converter novamente
+                            df['Data Início'] = pd.to_datetime(df['Data Início'], errors='coerce')
+                            
+                            # Verifica se a conversão foi bem-sucedida
+                            if not pd.isna(df['Data Início']).all():
+                                hoje = pd.Timestamp(datetime.now())
+                                df['Tempo de Serviço (Anos)'] = df['Data Início'].apply(
+                                    lambda x: (hoje - x).days / 365.25 if pd.notnull(x) else None
+                                ).round(1)
+                            else:
+                                logger.warning("Não foi possível converter 'Data Início' para calcular tempo de serviço")
+                                df['Tempo de Serviço (Anos)'] = np.nan
+                                
+                        # Limita os valores e preenche os NaN
+                        df['Tempo de Serviço (Anos)'] = df['Tempo de Serviço (Anos)'].fillna(0).clip(0, 40)
+                        
+                    except Exception as e:
+                        logger.error(f"Erro ao calcular tempo de serviço: {str(e)}")
+                        df['Tempo de Serviço (Anos)'] = np.nan
                 
                 return df
                 
@@ -992,7 +1030,19 @@ class DashboardUI:
             
             date_columns = [col for col in ['Data Nascimento', 'Data Início'] if col in df_paginated.columns]
             for col in date_columns:
-                df_paginated[col] = pd.to_datetime(df_paginated[col]).dt.strftime('%d/%m/%Y')
+                try:
+                    # Verifica se a coluna é do tipo datetime antes de usar .dt
+                    if pd.api.types.is_datetime64_any_dtype(df_paginated[col]):
+                        df_paginated[col] = df_paginated[col].dt.strftime('%d/%m/%Y')
+                    else:
+                        # Tenta converter para datetime
+                        temp = pd.to_datetime(df_paginated[col], errors='coerce')
+                        # Se a conversão funcionar, formata a data
+                        if not pd.isna(temp).all():
+                            df_paginated[col] = temp.dt.strftime('%d/%m/%Y')
+                except Exception as e:
+                    logger.warning(f"Erro ao formatar coluna de data {col}: {str(e)}")
+                    # Mantém a coluna como está se houver erro
             
             # Substitui CPF pela versão formatada se disponível
             if 'CPF_formatado' in df_paginated.columns and 'CPF' in display_columns:
@@ -1182,10 +1232,12 @@ def main():
                 """)
         
         if uploaded_file is not None:
-            # Carrega os dados
-            df = DataLoader.load_data(uploaded_file)
-            
-            if df is not None and DataValidator.validate_dataframe(df):
+            try:
+                # Carrega os dados com feedback visual
+                with st.spinner("Carregando e processando dados..."):
+                    df = DataLoader.load_data(uploaded_file)
+                
+                if df is not None and DataValidator.validate_dataframe(df):
                 # Criar métricas resumidas
                 DashboardUI.create_summary_metrics(df)
                 
@@ -1268,9 +1320,47 @@ def main():
                 except Exception as e:
                     logger.error(f"Erro ao processar dados filtrados: {str(e)}", exc_info=True)
                     st.error(f"Erro ao processar dados filtrados: {str(e)}")
+            except Exception as e:
+                # Captura erros específicos durante o carregamento
+                logger.error(f"Erro ao processar o arquivo: {str(e)}", exc_info=True)
+                st.error(f"Erro ao processar o arquivo: {str(e)}")
+                
+                # Dá dicas específicas com base no erro
+                if "Can only use .dt accessor with datetimelike values" in str(e):
+                    st.warning("Problema com formato de datas no arquivo. Verifique se o arquivo está no formato correto.")
+                elif "No columns to parse from file" in str(e):
+                    st.warning("O arquivo não contém colunas válidas. Verifique se o separador é ';' e se o arquivo não está corrompido.")
+                elif "Encoding" in str(e) or "decode" in str(e).lower():
+                    st.warning("Problema com a codificação do arquivo. Tente salvar o arquivo como UTF-8 ou Windows-1252 (CP1252).")
+                
+                # Exibe o rastreamento da exceção em um expander para ajudar na depuração
+                with st.expander("Detalhes técnicos do erro (para suporte)"):
+                    st.code(traceback.format_exc())
         else:
             # Sem arquivo, exibe mensagem e exemplo
             st.info("👆 Faça o upload do arquivo CSV do Portal da Transparência para começar a análise.")
+            
+            # Adiciona dicas de resolução de problemas
+            with st.expander("💡 Dicas para resolução de problemas comuns"):
+                st.markdown("""
+                    ### Problemas comuns e soluções
+                    
+                    1. **Erro de encoding**: Se o dashboard mostrar erro de encoding, tente:
+                       - Abrir o CSV no Excel e salvar novamente como CSV (separado por ponto e vírgula)
+                       - Verificar se o encoding está como Windows-1252 (CP1252) ou UTF-8
+                    
+                    2. **Erro com datas**: Se houver problemas com formato de data:
+                       - Verifique se as datas estão no formato DD/MM/AAAA
+                       - Certifique-se que não há mistura de formatos no arquivo
+                    
+                    3. **Arquivo não reconhecido**: 
+                       - Verifique se o separador é ponto e vírgula (;)
+                       - Certifique-se que o arquivo é o CSV exportado do Portal da Transparência
+                       
+                    4. **Dashboard lento**:
+                       - Tente usar um navegador mais recente
+                       - Feche outras abas do navegador para liberar memória
+                """)
             
             # Exemplo de visualização com dados fictícios
             with st.expander("🔍 Ver exemplo com dados fictícios", expanded=False):
@@ -1310,7 +1400,12 @@ def main():
     except Exception as e:
         logger.error(f"Erro geral no dashboard: {str(e)}", exc_info=True)
         st.error(f"Ocorreu um erro no dashboard: {str(e)}")
-        st.error("Por favor, recarregue a página e tente novamente.")
+        
+        # Exibe o rastreamento da exceção em um expander para ajudar na depuração
+        with st.expander("Detalhes técnicos do erro (para suporte)"):
+            st.code(traceback.format_exc())
+        
+        st.warning("Por favor, recarregue a página e tente novamente. Se o erro persistir, verifique o formato do arquivo CSV.")
 
 if __name__ == "__main__":
     main()
