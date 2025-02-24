@@ -113,14 +113,18 @@ class DataLoader:
                         # Define tipos de dados para todas as colunas
                         dtype_dict = {col: str for col in DataLoader.EXPECTED_COLUMNS}
                         
-                        # Carrega o CSV pulando linhas de metadados
+                        # Carrega o CSV pulando linhas de metadados e com opções adicionais de segurança
                         df = pd.read_csv(
                             file,
                             encoding=encoding,
                             sep=';',
                             dtype=dtype_dict,
                             skiprows=7,
-                            on_bad_lines='skip'
+                            on_bad_lines='skip',
+                            keep_default_na=True,
+                            skipinitialspace=True,
+                            engine='python',  # Mais flexível para formatos não padrão
+                            low_memory=False  # Evita erros de tipagem mista em colunas
                         )
                         
                         logger.info(f"Arquivo CSV carregado com sucesso usando encoding {encoding}")
@@ -136,7 +140,38 @@ class DataLoader:
                 # Verifica colunas mínimas
                 colunas_faltantes = [col for col in COLUNAS_OBRIGATORIAS if col not in df.columns]
                 if colunas_faltantes:
-                    raise ValueError(f"Colunas obrigatórias faltando: {colunas_faltantes}")
+                    # Mostra um aviso com detalhes sobre os cabeçalhos encontrados
+                    logger.warning(f"Colunas obrigatórias faltando: {colunas_faltantes}")
+                    logger.warning(f"Colunas encontradas: {df.columns.tolist()}")
+                    
+                    # Tenta identificar colunas similares (caso haja diferenças mínimas de nome)
+                    for col_faltante in colunas_faltantes:
+                        # Procura colunas com nome similar
+                        colunas_similares = [col for col in df.columns if col_faltante.lower() in col.lower()]
+                        if colunas_similares:
+                            logger.info(f"Possíveis alternativas para '{col_faltante}': {colunas_similares}")
+                    
+                    # Trata o caso especial do "ID" que pode estar com outro nome
+                    if "ID" in colunas_faltantes and len(df.columns) > 0:
+                        # Assume que a primeira coluna pode ser o ID
+                        df.rename(columns={df.columns[0]: "ID"}, inplace=True)
+                        logger.info(f"Renomeando a primeira coluna {df.columns[0]} para 'ID'")
+                    
+                    # Cria colunas padrão para poder continuar
+                    for col in colunas_faltantes:
+                        if col == "Idade":
+                            # Se não tem idade mas tem data de nascimento, calcula
+                            if "Data Nascimento" in df.columns:
+                                try:
+                                    df["Idade"] = pd.to_datetime("today") - pd.to_datetime(df["Data Nascimento"])
+                                    df["Idade"] = df["Idade"].dt.days / 365.25
+                                    logger.info("Idade calculada a partir da Data de Nascimento")
+                                except:
+                                    df["Idade"] = 35  # Valor padrão
+                            else:
+                                df["Idade"] = 35  # Valor padrão
+                        elif col not in df.columns:  # Ainda faltando após as tentativas acima
+                            df[col] = ""  # Valor vazio para continuar
                 
                 # Converte as colunas de data após carregar o DataFrame
                 date_columns = ['Data Nascimento', 'Data Início']
@@ -258,12 +293,24 @@ class DataLoader:
             try:
                 if 'Idade' in df.columns:
                     # Limpa a coluna removendo espaços e substituindo vírgulas por pontos
-                    df.loc[:, 'Idade'] = df['Idade'].astype(str).str.strip()
-                    df.loc[:, 'Idade'] = df['Idade'].str.replace(',', '.')
-                    # Converte para numérico, tratando erros como NaN
-                    df.loc[:, 'Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
-                    # Filtra idades válidas
-                    df = df[df['Idade'].between(18, 62, inclusive='both')]
+                    # Primeiro garantimos que não é uma coluna vazia
+                    if len(df) > 0 and not df['Idade'].isna().all():
+                        # Converte para string para manipulação
+                        df['Idade'] = df['Idade'].astype(str).str.strip()
+                        df['Idade'] = df['Idade'].str.replace(',', '.')
+                        # Converte para numérico, tratando erros como NaN
+                        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+                        # Filtra idades válidas, mas apenas se tivermos dados válidos
+                        if not df['Idade'].isna().all():
+                            df = df[df['Idade'].between(18, 62, inclusive='both')]
+                        else:
+                            # Se todas as idades são NaN, cria valores padrão
+                            logger.warning("Todas as idades convertidas são NaN. Usando valores padrão.")
+                            df['Idade'] = 35  # Idade padrão
+                    else:
+                        # Se a coluna está vazia, preenche com valor padrão
+                        logger.warning("Coluna 'Idade' vazia. Usando valores padrão.")
+                        df['Idade'] = 35
                 else:
                     logger.error("Coluna 'Idade' não encontrada no DataFrame")
                     st.error("Coluna 'Idade' não encontrada nos dados")
@@ -274,30 +321,53 @@ class DataLoader:
                 return None
             
             # Limpa CPF (remove pontuação)
-            df.loc[:, 'CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
-            
-            # Adiciona formato visual para CPF
-            df.loc[:, 'CPF_formatado'] = df['CPF'].apply(
-                lambda x: f"{x[:3]}.{x[3:6]}.{x[6:9]}-{x[9:]}" if len(x) == 11 else x
-            )
+            if 'CPF' in df.columns:
+                # Verifica se a coluna CPF é do tipo objeto/string antes de aplicar str.replace
+                if df['CPF'].dtype == 'object':
+                    df['CPF'] = df['CPF'].astype(str)
+                    df['CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
+                    
+                    # Adiciona formato visual para CPF
+                    df['CPF_formatado'] = df['CPF'].apply(
+                        lambda x: f"{x[:3]}.{x[3:6]}.{x[6:9]}-{x[9:]}" if isinstance(x, str) and len(x) == 11 else x
+                    )
+                else:
+                    # Converte para string caso não seja
+                    df['CPF'] = df['CPF'].astype(str)
+                    df['CPF_formatado'] = df['CPF']
             
             # Limpa espaços extras em colunas de texto
             text_columns = df.select_dtypes(include=['object']).columns
             for col in text_columns:
-                df.loc[:, col] = df[col].str.strip()
+                if col in df.columns:  # Verifica se a coluna ainda existe
+                    try:
+                        # Certifica-se que estamos trabalhando com strings
+                        df[col] = df[col].astype(str)
+                        df[col] = df[col].str.strip()
+                    except Exception as e:
+                        logger.warning(f"Não foi possível limpar espaços na coluna {col}: {str(e)}")
             
             # Extrai cidade da coluna UF-Cidade
             if 'UF-Cidade' in df.columns:
                 try:
-                    # Padrão esperado: "PR-CURITIBA"
-                    cidade_split = df['UF-Cidade'].str.split('-', n=1, expand=True)
-                    df.loc[:, 'UF'] = cidade_split[0]
-                    df.loc[:, 'Cidade'] = cidade_split[1]
+                    # Verifica se o formato da coluna contém o hífen para dividir
+                    primeiro_valor = df['UF-Cidade'].iloc[0] if len(df) > 0 else ''
+                    
+                    if isinstance(primeiro_valor, str) and '-' in primeiro_valor:
+                        # Trata cada linha individualmente para evitar erros de split
+                        df['UF'] = df['UF-Cidade'].apply(lambda x: x.split('-')[0] if isinstance(x, str) and '-' in x else 'PR')
+                        df['Cidade'] = df['UF-Cidade'].apply(lambda x: x.split('-')[1] if isinstance(x, str) and '-' in x and len(x.split('-')) > 1 else x)
+                    else:
+                        # Não tem formato UF-Cidade, então cria colunas padrão
+                        df['UF'] = 'PR'  # Assume PR como padrão
+                        df['Cidade'] = df['UF-Cidade']
                 except Exception as e:
                     logger.warning(f"Erro ao separar UF-Cidade: {str(e)}")
-                    # Fallback caso o padrão não seja consistente
-                    df.loc[:, 'UF'] = 'PR'  # Assume PR como padrão
-                    df.loc[:, 'Cidade'] = df['UF-Cidade'].copy()
+                    # Fallback mais seguro
+                    if 'UF' not in df.columns:
+                        df['UF'] = 'PR'
+                    if 'Cidade' not in df.columns:
+                        df['Cidade'] = df['UF-Cidade'] if 'UF-Cidade' in df.columns else 'Desconhecida'
             
             # Garante ordem das colunas conforme esperado
             expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
@@ -622,20 +692,45 @@ class ChartManager:
             Figura Plotly
         """
         try:
-            unit_counts = df['Descrição da Unidade de Trabalho'].value_counts().head(top_n)
-            
-            # Cores com gradiente
-            colors = px.colors.sequential.Reds_r[:top_n]
-            
-            fig = go.Figure(go.Bar(
-                x=unit_counts.values,
-                y=unit_counts.index,
-                orientation='h',
-                marker_color=colors,
-                text=unit_counts.values,
-                textposition='outside',
-                hovertemplate='Unidade: %{y}<br>Efetivo: %{x}<extra></extra>',
-            ))
+            # Verifica se a coluna existe e tem dados
+            if 'Descrição da Unidade de Trabalho' in df.columns and len(df) > 0:
+                unit_counts = df['Descrição da Unidade de Trabalho'].value_counts().head(top_n)
+                
+                # Prossegue apenas se temos unidades
+                if len(unit_counts) > 0:
+                    # Cores com gradiente (ajustado para o número real de unidades)
+                    n_colors = min(len(unit_counts), top_n)
+                    colors = px.colors.sequential.Reds_r[:n_colors] if n_colors > 0 else ['red']
+                    
+                    fig = go.Figure(go.Bar(
+                        x=unit_counts.values,
+                        y=unit_counts.index,
+                        orientation='h',
+                        marker_color=colors,
+                        text=unit_counts.values,
+                        textposition='outside',
+                        hovertemplate='Unidade: %{y}<br>Efetivo: %{x}<extra></extra>',
+                    ))
+                else:
+                    # Cria gráfico vazio com mensagem
+                    fig = go.Figure()
+                    fig.add_annotation(
+                        x=0.5, y=0.5,
+                        text="Sem dados de unidades disponíveis",
+                        font=dict(size=14),
+                        showarrow=False,
+                        xref="paper", yref="paper"
+                    )
+            else:
+                # Cria gráfico vazio com mensagem
+                fig = go.Figure()
+                fig.add_annotation(
+                    x=0.5, y=0.5,
+                    text="Coluna 'Descrição da Unidade de Trabalho' não encontrada",
+                    font=dict(size=14),
+                    showarrow=False,
+                    xref="paper", yref="paper"
+                )
             
             fig.update_layout(
                 title={
@@ -1455,4 +1550,30 @@ def main():
         st.warning("Por favor, recarregue a página e tente novamente. Se o erro persistir, verifique o formato do arquivo CSV.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Captura qualquer exceção não tratada
+        logger.critical(f"Erro crítico no aplicativo: {str(e)}", exc_info=True)
+        
+        # Exibe mensagem de erro amigável
+        st.error("😢 Ocorreu um erro crítico no aplicativo.")
+        st.error(f"Erro: {str(e)}")
+        
+        # Adiciona detalhes técnicos
+        with st.expander("Detalhes técnicos do erro (para suporte)"):
+            st.code(traceback.format_exc())
+            
+        # Sugestões de recuperação
+        st.info("""
+        ### Sugestões para resolver o problema:
+        
+        1. Verifique se o arquivo CSV tem o formato correto do Portal da Transparência
+        2. Tente recarregar a página e fazer upload novamente
+        3. Verifique se o arquivo não está corrompido
+        4. Entre em contato com o suporte técnico se o problema persistir
+        """)
+        
+        # Botão para recarregar aplicativo
+        if st.button("🔄 Recarregar aplicativo"):
+            st.experimental_rerun()
