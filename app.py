@@ -376,7 +376,7 @@ class ChartManager:
     
     @staticmethod
     def create_age_chart(df: pd.DataFrame) -> go.Figure:
-        """Cria gráfico de distribuição de idade"""
+        """Cria gráfico de distribuição de idade (pirâmide etária)"""
         try:
             # Verificar se há dados para criar o gráfico
             if len(df) == 0:
@@ -395,15 +395,62 @@ class ChartManager:
                 )
                 return fig
             
-            # Criar faixas etárias
+            # Verificar se a coluna Idade existe e tem valores
+            if 'Idade' not in df.columns or df['Idade'].isna().all():
+                logger.warning("Coluna Idade não encontrada ou sem valores válidos")
+                # Criar um gráfico vazio com mensagem
+                fig = go.Figure()
+                fig.add_annotation(
+                    text="Dados de idade não disponíveis",
+                    xref="paper", yref="paper",
+                    x=0.5, y=0.5, showarrow=False
+                )
+                fig.update_layout(
+                    title="Distribuição por Idade",
+                    height=400
+                )
+                return fig
+            
+            # Garantir que a coluna Idade seja numérica
+            df_temp = df.copy()
+            
+            # Converter a coluna Idade para numérico, tratando erros como NaN
+            df_temp['Idade'] = pd.to_numeric(df_temp['Idade'], errors='coerce')
+            
+            # Filtrar apenas valores válidos para o gráfico
+            df_temp = df_temp.dropna(subset=['Idade'])
+            
+            # Verificar se ainda há dados após filtragem
+            if len(df_temp) == 0:
+                logger.warning("Nenhum valor válido de idade após filtragem")
+                fig = go.Figure()
+                fig.add_annotation(
+                    text="Nenhum valor válido de idade disponível",
+                    xref="paper", yref="paper",
+                    x=0.5, y=0.5, showarrow=False
+                )
+                fig.update_layout(title="Distribuição por Idade", height=400)
+                return fig
+            
+            # Criar faixas etárias para a pirâmide
             bins = [18, 22, 27, 32, 37, 42, 47, 52, 57, 62, 70]
             labels = ['18-22', '23-27', '28-32', '33-37', '38-42', '43-47', '48-52', '53-57', '58-62', '63-70']
             
-            # Cria uma cópia temporária do DataFrame para não modificar o original
-            temp_df = df.copy()
-            temp_df.loc[:, 'faixa_etaria'] = pd.cut(temp_df['Idade'], bins=bins, labels=labels)
-            idade_counts = temp_df['faixa_etaria'].value_counts().sort_index()
+            # Usar cut para categorizar as idades em faixas
+            df_temp['faixa_etaria'] = pd.cut(
+                df_temp['Idade'], 
+                bins=bins, 
+                labels=labels,
+                include_lowest=True
+            )
             
+            # Contar ocorrências em cada faixa
+            idade_counts = df_temp['faixa_etaria'].value_counts().sort_index()
+            
+            # Log para debug
+            logger.info(f"Distribuição por faixa etária: {dict(idade_counts)}")
+            
+            # Criar gráfico de barras
             fig = go.Figure(go.Bar(
                 x=list(idade_counts.index),
                 y=idade_counts.values,
@@ -425,10 +472,14 @@ class ChartManager:
             return fig
         except Exception as e:
             logger.error(f"Erro ao criar gráfico de idade: {str(e)}")
+            # Registra o traceback para facilitar o debug
+            import traceback
+            logger.error(traceback.format_exc())
+            
             # Retorna um gráfico com mensagem de erro
             fig = go.Figure()
             fig.add_annotation(
-                text=f"Erro ao gerar visualização: {str(e)}",
+                text=f"Erro ao gerar visualização de idade: {str(e)}",
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, showarrow=False
             )
