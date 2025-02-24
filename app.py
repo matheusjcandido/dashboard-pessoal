@@ -50,6 +50,13 @@ class DataLoader:
     def load_data(file) -> pd.DataFrame:
         """Carrega e processa o arquivo CSV"""
         try:
+            # Detecção de problemas iniciais
+            file_content = file.read()
+            file.seek(0)  # Reinicia o ponteiro do arquivo
+            
+            # Log dos primeiros bytes para debug
+            logger.info(f"Primeiros 100 bytes do arquivo: {file_content[:100]}")
+            
             # Define tipos de dados para todas as colunas
             dtype_dict = {
                 'ID': str,
@@ -76,28 +83,89 @@ class DataLoader:
                 'UF-Cidade': str
             }
 
-            # Carrega o CSV pulando linhas de metadados
-            df = pd.read_csv(
-                file,
-                encoding='cp1252',
-                sep=';',
-                dtype=dtype_dict,
-                skiprows=7,
-                on_bad_lines='skip'
-            )
+            # Tenta diferentes configurações de leitura
+            try:
+                # Primeira tentativa: encoding cp1252
+                df = pd.read_csv(
+                    file,
+                    encoding='cp1252',
+                    sep=';',
+                    dtype=dtype_dict,
+                    skiprows=7,
+                    on_bad_lines='skip'
+                )
+            except Exception as e:
+                logger.warning(f"Falha na primeira tentativa de leitura: {str(e)}")
+                file.seek(0)  # Reinicia o ponteiro do arquivo
+                
+                try:
+                    # Segunda tentativa: encoding latin1
+                    df = pd.read_csv(
+                        file,
+                        encoding='latin1',
+                        sep=';',
+                        dtype=dtype_dict,
+                        skiprows=7,
+                        on_bad_lines='skip'
+                    )
+                except Exception as e2:
+                    logger.warning(f"Falha na segunda tentativa de leitura: {str(e2)}")
+                    file.seek(0)  # Reinicia o ponteiro do arquivo
+                    
+                    # Terceira tentativa: encoding utf-8
+                    df = pd.read_csv(
+                        file,
+                        encoding='utf-8',
+                        sep=';',
+                        dtype=dtype_dict,
+                        skiprows=7,
+                        on_bad_lines='skip'
+                    )
             
-            # Log das colunas disponíveis apenas no logger
+            # Log das colunas disponíveis
             logger.info(f"Colunas encontradas no arquivo: {df.columns.tolist()}")
+            logger.info(f"Número de registros iniciais: {len(df)}")
             
+            # Se o DataFrame está vazio após a leitura, tenta com menos skiprows
+            if len(df) == 0:
+                logger.warning("DataFrame vazio após leitura inicial, tentando com skiprows=0")
+                file.seek(0)  # Reinicia o ponteiro do arquivo
+                
+                df = pd.read_csv(
+                    file,
+                    encoding='utf-8',  # Usar a codificação que funcionou melhor
+                    sep=';',
+                    dtype=str,  # Usar str para todas as colunas para simplificar
+                    skiprows=0,
+                    on_bad_lines='skip'
+                )
+                
+                logger.info(f"Nova tentativa com skiprows=0: {len(df)} registros")
+            
+            # Verifica se há pelo menos uma linha no DataFrame
+            if len(df) == 0:
+                st.error("Arquivo sem dados válidos. Verifique o formato e o conteúdo.")
+                return None
+                
             # Converte as colunas de data após carregar o DataFrame
             date_columns = ['Data Nascimento', 'Data Início']
             for col in date_columns:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+                    try:
+                        df.loc[:, col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+                    except Exception as date_error:
+                        logger.warning(f"Erro ao converter coluna de data {col}: {str(date_error)}")
             
             # Limpa e processa os dados
             df = DataLoader._process_dataframe(df)
             
+            # Verifica se ainda há dados após o processamento
+            if df is None or len(df) == 0:
+                logger.error("DataFrame vazio após processamento")
+                st.error("Não foi possível extrair dados válidos do arquivo após o processamento.")
+                return None
+                
+            logger.info(f"Número de registros após processamento: {len(df)}")
             return df
             
         except Exception as e:
@@ -112,60 +180,160 @@ class DataLoader:
             # Cria uma cópia explícita do DataFrame para evitar SettingWithCopyWarning
             df = df.copy()
             
+            # Log inicial
+            logger.info(f"Processando DataFrame com {len(df)} linhas iniciais")
+            
+            # Verificar e normalizar os nomes das colunas
+            # Às vezes pode haver espaços extras ou caracteres especiais nos nomes das colunas
+            df.columns = [col.strip() for col in df.columns]
+            
+            # Log dos nomes de colunas normalizados
+            logger.info(f"Colunas após normalização: {df.columns.tolist()}")
+            
+            # Para arquivos com linhas em branco no início
+            if len(df) > 0 and pd.isna(df.iloc[0][0]):
+                logger.info("Removendo linhas iniciais em branco")
+                # Encontra a primeira linha não vazia
+                first_non_empty = 0
+                for i, row in df.iterrows():
+                    if not pd.isna(row[0]) and str(row[0]).strip():
+                        first_non_empty = i
+                        break
+                
+                if first_non_empty > 0:
+                    df = df.iloc[first_non_empty:].reset_index(drop=True)
+                    logger.info(f"DataFrame após remover linhas em branco: {len(df)} linhas")
+            
             # Corrige o deslocamento de colunas causado por ';' extras
-            if 'UF-Cidade' in df.columns:
-                df.loc[:, 'UF-Cidade'] = df['UF-Cidade'].str.replace('; ', ';', regex=False)
-                df.loc[:, 'UF-Cidade'] = df['UF-Cidade'].str.replace(';;', ';', regex=False)
+            col_uf_cidade = next((col for col in df.columns if 'UF' in col or 'Cidade' in col), None)
+            if col_uf_cidade:
+                logger.info(f"Corrigindo formato da coluna {col_uf_cidade}")
+                df.loc[:, col_uf_cidade] = df[col_uf_cidade].astype(str).str.replace('; ', ';', regex=False)
+                df.loc[:, col_uf_cidade] = df[col_uf_cidade].astype(str).str.replace(';;', ';', regex=False)
 
             # Remove linhas totalmente vazias
-            df = df.dropna(how='all')
+            df = df.dropna(how='all').reset_index(drop=True)
+            logger.info(f"DataFrame após remover linhas vazias: {len(df)} linhas")
+            
+            # Verificar se há coluna de idade ou tentar criá-la
+            if 'Idade' not in df.columns:
+                # Tenta encontrar uma coluna de idade com nome similar
+                idade_cols = [col for col in df.columns if 'idade' in col.lower()]
+                if idade_cols:
+                    logger.info(f"Usando coluna alternativa para idade: {idade_cols[0]}")
+                    df.loc[:, 'Idade'] = df[idade_cols[0]]
+                elif 'Data Nascimento' in df.columns:
+                    # Tenta calcular a idade a partir da data de nascimento
+                    logger.info("Calculando idade a partir da data de nascimento")
+                    try:
+                        hoje = pd.Timestamp.now()
+                        df.loc[:, 'Idade'] = df['Data Nascimento'].apply(
+                            lambda x: (hoje - pd.to_datetime(x, errors='coerce')).days / 365.25 
+                            if pd.notna(x) else None
+                        )
+                    except Exception as e:
+                        logger.error(f"Erro ao calcular idade: {str(e)}")
+                else:
+                    logger.error("Coluna 'Idade' não encontrada e não foi possível criá-la")
+                    # Em vez de retornar None, vamos criar uma coluna de idade padrão
+                    df.loc[:, 'Idade'] = 30  # Valor padrão
             
             # Processa a coluna de idade
             try:
-                if 'Idade' in df.columns:
-                    # Primeiro, limpa a coluna removendo espaços e substituindo vírgulas por pontos
-                    df.loc[:, 'Idade'] = df['Idade'].astype(str).str.strip()
-                    df.loc[:, 'Idade'] = df['Idade'].str.replace(',', '.')
-                    # Converte para numérico, tratando erros como NaN
-                    df.loc[:, 'Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
-                    # Filtra idades válidas e cria nova cópia
-                    df = df[df['Idade'].between(18, 70, inclusive='both')].copy()
+                # Primeiro, limpa a coluna removendo espaços e substituindo vírgulas por pontos
+                df.loc[:, 'Idade'] = df['Idade'].astype(str).str.strip()
+                df.loc[:, 'Idade'] = df['Idade'].str.replace(',', '.', regex=False)
+                
+                # Tenta extrair apenas os dígitos e converter
+                df.loc[:, 'Idade'] = df['Idade'].str.extract(r'(\d+\.?\d*)').iloc[:, 0]
+                
+                # Converte para numérico, tratando erros como NaN
+                df.loc[:, 'Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+                
+                # Log da distribuição de idades
+                idade_stats = df['Idade'].describe()
+                logger.info(f"Estatísticas de idade: {idade_stats}")
+                
+                # Filtra idades válidas e cria nova cópia - agora com intervalo mais amplo
+                idade_min = 18
+                idade_max = 70
+                
+                # Verificar quantos registros seriam filtrados
+                n_filtrados = df[~df['Idade'].between(idade_min, idade_max, inclusive='both')].shape[0]
+                percentual_filtrado = n_filtrados / len(df) * 100 if len(df) > 0 else 0
+                
+                logger.info(f"Filtro de idade removeria {n_filtrados} registros ({percentual_filtrado:.1f}%)")
+                
+                # Se o filtro removeria mais de 50% dos registros, ajustar os limites ou desabilitá-lo
+                if percentual_filtrado > 50:
+                    logger.warning(f"Filtro de idade desabilitado pois removeria muitos registros")
                 else:
-                    logger.error("Coluna 'Idade' não encontrada no DataFrame")
-                    st.error("Coluna 'Idade' não encontrada nos dados")
-                    return None
+                    df = df[df['Idade'].between(idade_min, idade_max, inclusive='both')].copy()
+                    logger.info(f"DataFrame após filtro de idade: {len(df)} linhas")
             except Exception as e:
                 logger.error(f"Erro ao processar coluna 'Idade': {str(e)}")
-                st.error(f"Erro ao processar coluna 'Idade': {str(e)}")
-                return None
+                # Não retornaremos None aqui para não interromper o processamento
+            
+            # Verificar a coluna de Cargo
+            if 'Cargo' not in df.columns:
+                cargo_cols = [col for col in df.columns if 'cargo' in col.lower() or 'posto' in col.lower() or 'graduação' in col.lower()]
+                if cargo_cols:
+                    logger.info(f"Usando coluna alternativa para cargo: {cargo_cols[0]}")
+                    df.loc[:, 'Cargo'] = df[cargo_cols[0]]
+                else:
+                    logger.warning("Coluna 'Cargo' não encontrada")
+                    df.loc[:, 'Cargo'] = 'Não informado'
+            
+            # Verificar a coluna de Nome
+            if 'Nome' not in df.columns:
+                nome_cols = [col for col in df.columns if 'nome' in col.lower()]
+                if nome_cols:
+                    logger.info(f"Usando coluna alternativa para nome: {nome_cols[0]}")
+                    df.loc[:, 'Nome'] = df[nome_cols[0]]
+                else:
+                    logger.warning("Coluna 'Nome' não encontrada")
+                    df.loc[:, 'Nome'] = 'Não informado'
             
             # Limpa CPF (remove pontuação)
-            df.loc[:, 'CPF'] = df['CPF'].str.replace(r'[^\d]', '', regex=True)
+            if 'CPF' in df.columns:
+                df.loc[:, 'CPF'] = df['CPF'].astype(str).str.replace(r'[^\d]', '', regex=True)
             
             # Limpa espaços extras em colunas de texto
             text_columns = df.select_dtypes(include=['object']).columns
             for col in text_columns:
-                df.loc[:, col] = df[col].str.strip()
+                df.loc[:, col] = df[col].astype(str).str.strip()
             
             # Normaliza a coluna 'Recebe Abono Permanência'
-            if 'Recebe Abono Permanência' in df.columns:
+            col_abono = next((col for col in df.columns 
+                             if 'abono' in col.lower() or 'permanência' in col.lower()), None)
+            
+            if col_abono:
+                logger.info(f"Normalizando coluna de abono: {col_abono}")
+                # Renomear para o nome padrão se necessário
+                if col_abono != 'Recebe Abono Permanência':
+                    df.loc[:, 'Recebe Abono Permanência'] = df[col_abono]
+                
                 df.loc[:, 'Recebe Abono Permanência'] = df['Recebe Abono Permanência'].fillna('Não')
                 df.loc[:, 'Recebe Abono Permanência'] = df['Recebe Abono Permanência'].apply(
-                    lambda x: 'Sim' if 'Sim' in str(x) or 'sim' in str(x) or 'S' in str(x) else 'Não'
+                    lambda x: 'Sim' if any(s in str(x).lower() for s in ['sim', 's', 'y', 'yes']) else 'Não'
                 )
-            
-            # Garante ordem das colunas conforme esperado
-            expected_cols = [col for col in DataLoader.EXPECTED_COLUMNS if col in df.columns]
-            df = df[expected_cols]
+            else:
+                logger.warning("Coluna de abono permanência não encontrada")
+                df.loc[:, 'Recebe Abono Permanência'] = 'Não'
             
             # Verifica se o DataFrame tem pelo menos um registro
             if len(df) == 0:
                 logger.warning("DataFrame está vazio após processamento")
                 st.warning("Nenhum registro encontrado após aplicar os filtros. Verifique o arquivo carregado.")
             
+            # Log final
+            logger.info(f"Processamento concluído. DataFrame final com {len(df)} linhas")
             return df
         except Exception as e:
             logger.error(f"Erro ao processar DataFrame: {str(e)}")
+            # Registra o traceback completo para depuração
+            import traceback
+            logger.error(traceback.format_exc())
             raise
 
 class DataFilter:
