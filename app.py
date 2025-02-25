@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import io
 import numpy as np
+import re
 
 # Configuração da página
 st.set_page_config(
@@ -14,48 +15,78 @@ st.set_page_config(
 
 # Função para processar o arquivo CSV
 def processar_arquivo_csv(uploaded_file):
-    # Leitura inicial do arquivo
-    conteudo = uploaded_file.read().decode('cp1252')
-    linhas = conteudo.split('\r\n')
-    
-    # Identificar linha de cabeçalho (começa com 'ID,Nome,')
-    indice_header = -1
-    for i, linha in enumerate(linhas):
-        if linha.startswith('ID,Nome,'):
-            indice_header = i
-            break
-    
-    if indice_header == -1:
-        st.error("Formato de arquivo inválido. Não foi possível encontrar o cabeçalho.")
-        return None
-    
-    # Extrair nomes das colunas
-    colunas = linhas[indice_header].split(',')
-    
-    # Criar lista de dicionários com os dados
-    dados = []
-    for i in range(indice_header + 2, len(linhas)):
-        linha = linhas[i].strip()
-        if not linha:  # Pular linhas vazias
-            continue
+    """
+    Processa o arquivo CSV da SEAP, detectando automaticamente o delimitador
+    """
+    try:
+        # Leitura inicial do arquivo
+        conteudo = uploaded_file.read()
         
-        campos = linha.split(',')
-        if len(campos) >= len(colunas):
-            # Criar dicionário com os dados da linha
-            registro = {}
-            for j, coluna in enumerate(colunas):
-                if j < len(campos):
-                    registro[coluna] = campos[j]
-            dados.append(registro)
+        # Tentar decodificar com cp1252 (Windows Latin-1)
+        try:
+            texto = conteudo.decode('cp1252')
+        except UnicodeDecodeError:
+            # Fallback para utf-8
+            texto = conteudo.decode('utf-8', errors='replace')
+        
+        # Dividir em linhas
+        linhas = texto.split('\r\n')
+        if len(linhas) <= 1:
+            linhas = texto.split('\n')
+        
+        # Detectar linha de cabeçalho e delimitador
+        indice_header = -1
+        delimitador = ','  # padrão
+        
+        for i, linha in enumerate(linhas):
+            # Procurar por padrão de cabeçalho (começa com ID e contém Nome, RG, CPF)
+            if re.match(r'^ID[,;]Nome[,;]RG', linha):
+                indice_header = i
+                # Determinar o delimitador
+                if ';' in linha:
+                    delimitador = ';'
+                break
+        
+        if indice_header == -1:
+            st.error("Formato de arquivo inválido. Não foi possível encontrar o cabeçalho com ID, Nome, RG.")
+            return None
+        
+        # Extrair nomes das colunas
+        colunas = linhas[indice_header].split(delimitador)
+        
+        # Criar lista de dicionários com os dados
+        dados = []
+        for i in range(indice_header + 2, len(linhas)):  # +2 para pular a linha vazia após o header
+            linha = linhas[i].strip()
+            if not linha:  # Pular linhas vazias
+                continue
+            
+            campos = linha.split(delimitador)
+            if len(campos) >= len(colunas):
+                # Criar dicionário com os dados da linha
+                registro = {}
+                for j, coluna in enumerate(colunas):
+                    if j < len(campos):
+                        registro[coluna] = campos[j]
+                dados.append(registro)
+        
+        # Converter para DataFrame
+        df = pd.DataFrame(dados)
+        
+        # Converter colunas numéricas
+        if 'Idade' in df.columns:
+            df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+        
+        # Informação de debug
+        st.success(f"Arquivo processado com sucesso!\n"
+                  f"- Delimitador detectado: '{delimitador}'\n"
+                  f"- {len(df)} registros encontrados")
+        
+        return df
     
-    # Converter para DataFrame
-    df = pd.DataFrame(dados)
-    
-    # Converter colunas numéricas
-    if 'Idade' in df.columns:
-        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
-    
-    return df
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo: {str(e)}")
+        return None
 
 # Função para criar o gráfico de distribuição de idade
 def criar_grafico_distribuicao_idade(df):
@@ -162,6 +193,10 @@ st.subheader("Corpo de Bombeiros Militar do Paraná")
 st.markdown("""
 Este dashboard visualiza a distribuição de idades do efetivo do Corpo de Bombeiros Militar do Paraná.
 Faça o upload do arquivo CSV gerado pela SEAP para visualizar os gráficos.
+
+**Formatos Suportados:**
+- Arquivos CSV com delimitador vírgula (,)
+- Arquivos CSV com delimitador ponto-e-vírgula (;)
 """)
 
 # Seção de upload de arquivo
@@ -228,8 +263,6 @@ else:
             df = processar_arquivo_csv(uploaded_file)
             
             if df is not None:
-                st.success(f"Arquivo carregado com sucesso! ({len(df)} registros)")
-                
                 # Mostrar amostra dos dados
                 with st.expander("Ver amostra dos dados"):
                     st.dataframe(df.head(10))
