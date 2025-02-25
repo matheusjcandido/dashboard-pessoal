@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import base64
 import io
-
+ 
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard CBMPR",
