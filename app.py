@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import base64
 import io
- 
+
 # Configuração da página
 st.set_page_config(
     page_title="Dashboard CBMPR",
@@ -76,29 +76,93 @@ def aplicar_css():
 @st.cache_data
 def carregar_dados(arquivo):
     try:
-        # Lê o arquivo CSV, pulando as 7 primeiras linhas de metadados
-        df = pd.read_csv(arquivo, encoding='cp1252', skiprows=7)
+        # Ler primeiras linhas para identificar a estrutura do arquivo
+        primeiras_linhas = pd.read_csv(arquivo, encoding='cp1252', nrows=20)
         
-        # Remover a linha vazia (linha 8 do arquivo original) se existir
+        # Identificar quantas linhas pular (metadata)
+        skiprows = 0
+        for i in range(min(10, len(primeiras_linhas))):
+            if "ID" in str(primeiras_linhas.iloc[i].values) and "Nome" in str(primeiras_linhas.iloc[i].values) and "Idade" in str(primeiras_linhas.iloc[i].values):
+                skiprows = i
+                break
+        
+        # Lê o arquivo CSV, pulando as linhas de metadados identificadas
+        df = pd.read_csv(arquivo, encoding='cp1252', skiprows=skiprows)
+        
+        # Se a primeira linha estiver vazia ou for cabeçalho repetido, remover
+        if df.iloc[0].isna().all() or "ID" in str(df.iloc[0].values):
+            df = df.iloc[1:].reset_index(drop=True)
+        
+        # Remover todas as linhas vazias
         df = df.dropna(how='all')
         
-        # Remover colunas que não interessam
-        colunas_excluir = ['Órgão', 'Função', 'Espec. Função', 'Tipo Empregado', 
-                           'Tipo Provimento', 'Categoria do Trabalhador', 
-                           'Regime Trabalhista', 'Regime Previdenciário', 
-                           'Plano de Segregação da Massa', 'Sujeito ao Teto do RGPS', 
-                           'UF-Cidade']
+        # Identificar colunas para exclusão
+        colunas_excluir = []
         
-        # Adicionar colunas sem cabeçalho para serem excluídas
-        colunas_sem_cabecalho = [col for col in df.columns if 'Unnamed' in col or col.strip() == '']
-        colunas_excluir.extend(colunas_sem_cabecalho)
+        # Procura pelos nomes de colunas independente de acentuação
+        for col in df.columns:
+            for exclude_term in ['rgao', 'Fun', 'Espec', 'Tipo Empregado', 'Tipo Provimento', 
+                               'Categoria', 'Regime Trab', 'Regime Prev', 'Segrega', 'RGPS', 'UF-Cidade', 'Unnamed']:
+                if exclude_term.lower() in col.lower() or col.strip() == '':
+                    colunas_excluir.append(col)
+                    break
         
         # Excluir colunas
         df = df.drop(columns=[col for col in colunas_excluir if col in df.columns])
         
-        # Converter coluna de idade para numérico
-        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+        # Limpeza dos dados
+        # Verificar se a coluna Idade existe
+        idade_col = [col for col in df.columns if 'idade' in col.lower()]
+        if idade_col:
+            idade_col = idade_col[0]
+            
+            # Limpar a coluna de idade (remover espaços e caracteres não numéricos)
+            df[idade_col] = df[idade_col].astype(str).str.strip()
+            df[idade_col] = df[idade_col].str.extract('(\d+)', expand=False)
+            
+            # Converter para numérico
+            df[idade_col] = pd.to_numeric(df[idade_col], errors='coerce')
+            
+            # Renomear para 'Idade' se necessário
+            if idade_col != 'Idade':
+                df = df.rename(columns={idade_col: 'Idade'})
+        else:
+            # Se não encontrar coluna de idade, criar uma coluna vazia
+            df['Idade'] = np.nan
+            st.warning("Coluna de idade não encontrada no arquivo")
         
+        # Verificar se a coluna Cargo existe
+        cargo_col = [col for col in df.columns if 'cargo' in col.lower()]
+        if cargo_col:
+            cargo_col = cargo_col[0]
+            # Renomear para 'Cargo' se necessário
+            if cargo_col != 'Cargo':
+                df = df.rename(columns={cargo_col: 'Cargo'})
+        else:
+            # Se não encontrar coluna de cargo, criar uma coluna vazia
+            df['Cargo'] = "Não informado"
+            st.warning("Coluna de cargo não encontrada no arquivo")
+        
+        # Verificar coluna abono
+        abono_col = [col for col in df.columns if 'abono' in col.lower() or 'perman' in col.lower()]
+        if abono_col:
+            abono_col = abono_col[0]
+            # Renomear para padrão
+            df = df.rename(columns={abono_col: 'Recebe Abono Permanência'})
+        else:
+            df['Recebe Abono Permanência'] = "N"
+            st.warning("Coluna de abono permanência não encontrada no arquivo")
+        
+        # Verificar coluna unidade
+        unidade_col = [col for col in df.columns if 'unidade' in col.lower() and 'trabalho' in col.lower()]
+        if unidade_col:
+            unidade_col = unidade_col[0]
+            # Renomear para padrão
+            df = df.rename(columns={unidade_col: 'Descrição da Unidade de Trabalho'})
+        else:
+            df['Descrição da Unidade de Trabalho'] = "Não informado"
+            st.warning("Coluna de unidade de trabalho não encontrada no arquivo")
+            
         # Ordenar hierarquia militar corretamente
         hierarquia = {
             "Coronel": 1, 
@@ -123,16 +187,33 @@ def carregar_dados(arquivo):
         
         # Adicionar coluna de ordem hierárquica
         df['Ordem_Hierarquica'] = df['Cargo'].map(hierarquia)
+        # Para cargos não encontrados na hierarquia, atribuir valor alto
+        df['Ordem_Hierarquica'] = df['Ordem_Hierarquica'].fillna(999)
+        
+        # Exibir informações sobre a importação
+        st.sidebar.success(f"Dados carregados com sucesso: {len(df)} registros")
         
         return df
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
+        st.error("Detalhes do erro: Verifique se o arquivo está no formato correto.")
         return pd.DataFrame()
 
 # Função para gerar estatísticas
 def gerar_estatisticas(df):
     total_efetivo = len(df)
-    media_idade = df['Idade'].mean()
+    
+    # Verificar se a coluna de idade existe e tem dados válidos
+    if 'Idade' in df.columns and not df['Idade'].isna().all():
+        # Converter para numérico, ignorando erros
+        idades_validas = pd.to_numeric(df['Idade'], errors='coerce').dropna()
+        
+        if len(idades_validas) > 0:
+            media_idade = idades_validas.mean()
+        else:
+            media_idade = None
+    else:
+        media_idade = None
     
     return {
         'total_efetivo': total_efetivo,
@@ -141,66 +222,139 @@ def gerar_estatisticas(df):
 
 # Função para criar gráfico de distribuição por idade
 def grafico_distribuicao_idade(df):
+    # Verificar se há dados de idade disponíveis
+    df_idade = df.dropna(subset=['Idade'])
+    
+    if len(df_idade) == 0:
+        # Criar um gráfico vazio com mensagem se não houver dados
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Dados de idade não disponíveis",
+            x=0.5, y=0.5,
+            xref="paper", yref="paper",
+            showarrow=False,
+            font=dict(color=VERMELHO, size=16)
+        )
+        fig.update_layout(title_text="Distribuição por Faixa Etária")
+        return fig
+    
     # Criar faixas etárias
     bins = [18, 25, 30, 35, 40, 45, 50, 55, 100]
     labels = ['18-25', '26-30', '31-35', '36-40', '41-45', '46-50', '51-55', '56+']
     
-    df['Faixa_Etaria'] = pd.cut(df['Idade'], bins=bins, labels=labels, right=False)
+    # Garantir que a idade é numérica
+    df_idade['Idade'] = pd.to_numeric(df_idade['Idade'], errors='coerce')
+    df_idade = df_idade.dropna(subset=['Idade'])
     
-    # Contar por faixa etária
-    contagem_idade = df['Faixa_Etaria'].value_counts().sort_index()
-    
-    # Criar gráfico
-    fig = px.bar(
-        x=contagem_idade.index, 
-        y=contagem_idade.values,
-        labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
-        title='Distribuição por Faixa Etária'
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font={'color': PRETO},
-        title={'font': {'color': VERMELHO}},
-        xaxis={'title': {'font': {'color': PRETO}}},
-        yaxis={'title': {'font': {'color': PRETO}}},
-        hovermode='closest'
-    )
-    
-    fig.update_traces(marker_color=VERMELHO, hovertemplate='Faixa: %{x}<br>Quantidade: %{y}')
+    try:
+        df_idade['Faixa_Etaria'] = pd.cut(df_idade['Idade'], bins=bins, labels=labels, right=False)
+        
+        # Contar por faixa etária
+        contagem_idade = df_idade['Faixa_Etaria'].value_counts().sort_index()
+        
+        # Criar gráfico
+        fig = px.bar(
+            x=contagem_idade.index, 
+            y=contagem_idade.values,
+            labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
+            title='Distribuição por Faixa Etária'
+        )
+        
+        fig.update_layout(
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font={'color': PRETO},
+            title={'font': {'color': VERMELHO}},
+            xaxis={'title': {'font': {'color': PRETO}}},
+            yaxis={'title': {'font': {'color': PRETO}}},
+            hovermode='closest'
+        )
+        
+        fig.update_traces(marker_color=VERMELHO, hovertemplate='Faixa: %{x}<br>Quantidade: %{y}')
+        
+    except Exception as e:
+        # Em caso de erro, criar um gráfico vazio com mensagem
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Erro ao processar dados de idade: {str(e)}",
+            x=0.5, y=0.5,
+            xref="paper", yref="paper",
+            showarrow=False,
+            font=dict(color=VERMELHO, size=14)
+        )
+        fig.update_layout(title_text="Distribuição por Faixa Etária")
     
     return fig
 
 # Função para criar gráfico de distribuição por cargo
 def grafico_distribuicao_cargo(df):
-    # Contar por cargo e ordenar pela hierarquia
-    contagem_cargo = df.groupby(['Cargo', 'Ordem_Hierarquica']).size().reset_index(name='Quantidade')
-    contagem_cargo = contagem_cargo.sort_values('Ordem_Hierarquica')
+    # Verificar se há dados de cargo disponíveis
+    if 'Cargo' not in df.columns or df['Cargo'].isna().all():
+        # Criar um gráfico vazio com mensagem
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Dados de posto/graduação não disponíveis",
+            x=0.5, y=0.5,
+            xref="paper", yref="paper",
+            showarrow=False,
+            font=dict(color=VERMELHO, size=16)
+        )
+        fig.update_layout(title_text="Distribuição por Posto/Graduação")
+        return fig
     
-    # Criar gráfico
-    fig = px.bar(
-        contagem_cargo,
-        x='Cargo',
-        y='Quantidade',
-        labels={'Cargo': 'Posto/Graduação', 'Quantidade': 'Quantidade'},
-        title='Distribuição por Posto/Graduação'
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        font={'color': PRETO},
-        title={'font': {'color': VERMELHO}},
-        xaxis={'title': {'font': {'color': PRETO}}},
-        yaxis={'title': {'font': {'color': PRETO}}},
-        hovermode='closest'
-    )
-    
-    fig.update_traces(marker_color=VERMELHO, hovertemplate='Cargo: %{x}<br>Quantidade: %{y}')
-    
-    # Ajustar layout para acomodar nomes longos
-    fig.update_layout(xaxis_tickangle=-45)
+    try:
+        # Contar por cargo e ordenar pela hierarquia
+        contagem_cargo = df.groupby(['Cargo', 'Ordem_Hierarquica']).size().reset_index(name='Quantidade')
+        contagem_cargo = contagem_cargo.sort_values('Ordem_Hierarquica')
+        
+        # Se não houver dados após o agrupamento
+        if len(contagem_cargo) == 0:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Sem dados suficientes para exibição",
+                x=0.5, y=0.5,
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(color=VERMELHO, size=16)
+            )
+            fig.update_layout(title_text="Distribuição por Posto/Graduação")
+            return fig
+        
+        # Criar gráfico
+        fig = px.bar(
+            contagem_cargo,
+            x='Cargo',
+            y='Quantidade',
+            labels={'Cargo': 'Posto/Graduação', 'Quantidade': 'Quantidade'},
+            title='Distribuição por Posto/Graduação'
+        )
+        
+        fig.update_layout(
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font={'color': PRETO},
+            title={'font': {'color': VERMELHO}},
+            xaxis={'title': {'font': {'color': PRETO}}},
+            yaxis={'title': {'font': {'color': PRETO}}},
+            hovermode='closest'
+        )
+        
+        fig.update_traces(marker_color=VERMELHO, hovertemplate='Cargo: %{x}<br>Quantidade: %{y}')
+        
+        # Ajustar layout para acomodar nomes longos
+        fig.update_layout(xaxis_tickangle=-45)
+        
+    except Exception as e:
+        # Em caso de erro, criar um gráfico vazio com mensagem
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Erro ao processar dados de posto/graduação: {str(e)}",
+            x=0.5, y=0.5,
+            xref="paper", yref="paper",
+            showarrow=False,
+            font=dict(color=VERMELHO, size=14)
+        )
+        fig.update_layout(title_text="Distribuição por Posto/Graduação")
     
     return fig
 
@@ -273,7 +427,11 @@ def main():
             with col2:
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.markdown('<div class="card-titulo">Média de Idade</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metrica">{estatisticas["media_idade"]:.1f}</div>', unsafe_allow_html=True)
+                if estatisticas["media_idade"] is not None:
+                    st.markdown(f'<div class="metrica">{estatisticas["media_idade"]:.1f}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="metrica">N/D</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="metrica-label">Dados de idade não disponíveis</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             # Segunda linha - Gráficos
@@ -308,19 +466,67 @@ def main():
     else:
         # Mensagem inicial
         st.info("👆 Faça o upload do arquivo CSV para visualizar o dashboard.")
+        
+        # Instruções detalhadas
         st.markdown("""
+        ## Dashboard de Efetivo do CBMPR
+        
         Este dashboard foi desenvolvido para visualização dos dados de pessoal do Corpo de Bombeiros Militar do Paraná.
         
-        **Funcionalidades:**
-        - Visualização do total de efetivo
-        - Média de idade
-        - Distribuição por idade
-        - Distribuição por posto/graduação
-        - Filtros por cargo, unidade de trabalho e abono permanência
-        - Tabela de dados com opção de download
+        ### Instruções de Uso:
         
-        Para começar, faça o upload do arquivo CSV usando o botão no menu lateral.
+        1. **Upload do Arquivo:**
+           - Clique no botão "Browse files" no menu lateral
+           - Selecione o arquivo CSV contendo os dados do efetivo
+           - O arquivo deve ter os cabeçalhos e dados conforme o padrão do CBMPR
+        
+        2. **Interagindo com o Dashboard:**
+           - Utilize os filtros no menu lateral para refinar a visualização
+           - Passe o mouse sobre os gráficos para ver detalhes
+           - Ordene e filtre a tabela conforme necessário
+           - Faça download dos dados filtrados em formato CSV
+        
+        ### Funcionalidades:
+        - Visualização do total de efetivo
+        - Média de idade do efetivo
+        - Gráfico de distribuição por faixa etária
+        - Gráfico de distribuição por posto/graduação
+        - Filtros por cargo, unidade de trabalho e abono permanência
+        - Tabela interativa com opção de download
+        
+        ### Estrutura Esperada do Arquivo:
+        O arquivo deve conter informações sobre o efetivo, incluindo colunas para:
+        - Nome
+        - Idade
+        - Cargo (Posto/Graduação)
+        - Unidade de Trabalho
+        - Abono Permanência
+        
+        ### Solução de Problemas:
+        - Se houver erro de carregamento, verifique se o arquivo está no formato correto
+        - Confira se a codificação do arquivo é compatível (cp1252/Windows-1252)
+        - Verifique se as colunas necessárias estão presentes no arquivo
         """)
+        
+        # Adicionar exemplo de formato esperado
+        with st.expander("Ver Exemplo de Formato Esperado"):
+            st.markdown("""
+            O arquivo CSV deve ter um formato similar a este:
+            
+            ```
+            ID,Nome,RG,CPF,Data Nascimento,Idade,Órgão,Código da Unidade de Trabalho,Descrição da Unidade de Trabalho,Cargo,Recebe Abono Permanência
+            12345,JOÃO DA SILVA,1234567,123.456.789-00,01/01/1980,45,SESP,W9600123,1GB 1SGB 1SEC BM,Coronel,S
+            67890,MARIA SANTOS,7654321,987.654.321-00,15/05/1990,35,SESP,W9600456,3GB 1SGB 1SEC BM,Capitão,N
+            ```
+            
+            Observações:
+            - O arquivo pode conter cabeçalhos e metadados nas primeiras linhas
+            - O sistema tentará identificar automaticamente as colunas relevantes
+            - Colunas adicionais serão ignoradas
+            """)
+        
+        # Footer com informações
+        st.markdown('<div class="footer">Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná.<br/>Desenvolvido em Python com Streamlit.</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
