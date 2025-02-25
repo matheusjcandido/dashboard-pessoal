@@ -618,7 +618,7 @@ else:
 st.header("2. Filtros")
 
 # Aplicar função de filtragem
-def aplicar_filtros(dataframe, filtro_abono, filtros_cargo):
+def aplicar_filtros(dataframe, filtro_abono, filtros_cargo, filtros_unidade=None):
     """Aplica todos os filtros selecionados ao dataframe"""
     df_filtrado = dataframe.copy()
     
@@ -630,10 +630,22 @@ def aplicar_filtros(dataframe, filtro_abono, filtros_cargo):
     if filtros_cargo and 'Cargo' in dataframe.columns:
         df_filtrado = df_filtrado[df_filtrado['Cargo'].isin(filtros_cargo)]
     
+    # Aplicar filtro de unidades, se houver
+    if filtros_unidade:
+        # Verificar qual coluna de unidade existe
+        coluna_unidade = None
+        for possivel_coluna in ['Descrição da Unidade de Trabalho', 'Unidade de Trabalho', 'Unidade']:
+            if possivel_coluna in dataframe.columns:
+                coluna_unidade = possivel_coluna
+                break
+        
+        if coluna_unidade and filtros_unidade:
+            df_filtrado = df_filtrado[df_filtrado[coluna_unidade].isin(filtros_unidade)]
+    
     return df_filtrado
 
 # Criar dois tabs para os diferentes tipos de filtros
-tab_abono, tab_cargo = st.tabs(["Filtro por Abono Permanência", "Filtro por Posto/Graduação"])
+tab_abono, tab_cargo, tab_unidade = st.tabs(["Filtro por Abono", "Filtro por Posto/Graduação", "Filtro por Unidade"])
 
 # Tab 1: Filtro de Abono Permanência
 with tab_abono:
@@ -682,10 +694,10 @@ with tab_cargo:
         # Opção para selecionar todos ou nenhum
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Selecionar Todos"):
+            if st.button("Selecionar Todos (Posto/Grad)"):
                 filtros_cargo = cargos_ordenados
         with col2:
-            if st.button("Limpar Seleção"):
+            if st.button("Limpar Postos/Grad"):
                 filtros_cargo = []
         
         # Verificar se há muitos cargos e criar selectbox com multiselect ou usar checkboxes
@@ -711,8 +723,40 @@ with tab_cargo:
         st.warning("Coluna 'Cargo' não encontrada no arquivo. O filtro por Posto/Graduação não está disponível.")
         filtros_cargo = None
 
+# Tab 3: Filtro por Unidade de Trabalho
+with tab_unidade:
+    # Verificar qual coluna de unidade existe
+    coluna_unidade = None
+    for possivel_coluna in ['Descrição da Unidade de Trabalho', 'Unidade de Trabalho', 'Unidade']:
+        if possivel_coluna in df.columns:
+            coluna_unidade = possivel_coluna
+            break
+    
+    if coluna_unidade:
+        # Obter lista única de unidades e ordená-las alfabeticamente
+        unidades = sorted(df[coluna_unidade].unique())
+        
+        # Opção para selecionar todos ou nenhum
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Selecionar Todas (Unidades)"):
+                filtros_unidade = unidades
+        with col2:
+            if st.button("Limpar Unidades"):
+                filtros_unidade = []
+        
+        # Usar multiselect para unidades
+        filtros_unidade = st.multiselect(
+            "Selecione as Unidades de Trabalho:",
+            options=unidades,
+            default=unidades  # Inicialmente todas selecionadas
+        )
+    else:
+        st.warning("Coluna de Unidade de Trabalho não encontrada no arquivo. O filtro não está disponível.")
+        filtros_unidade = None
+
 # Aplicar os filtros ao dataframe
-df_filtrado = aplicar_filtros(df, filtro_abono, filtros_cargo)
+df_filtrado = aplicar_filtros(df, filtro_abono, filtros_cargo, filtros_unidade)
 
 # Mostrar contadores com base nos filtros aplicados
 st.subheader("Estatísticas com base nos filtros aplicados")
@@ -917,62 +961,49 @@ elif tipo_grafico == "Distribuição por Posto/Graduação":
 
 else:  # Distribuição por Unidade de Trabalho
     st.subheader("Distribuição por Unidade de Trabalho")
-    # Usar dataframe já filtrado
-    fig = criar_grafico_distribuicao_unidade(df_filtrado, None)  # Filtro já aplicado
     
-    if fig:
-        st.pyplot(fig)
-        
-        # Opção para download do gráfico
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        
-        st.download_button(
-            label="📥 Download do Gráfico (PNG)",
-            data=buf,
-            file_name="distribuicao_unidades_cbmpr.png",
-            mime="image/png"
-        )
-        
-        # Verificar qual coluna de unidade existe
-        if 'Descrição da Unidade de Trabalho' in df_filtrado.columns:
-            coluna_unidade = 'Descrição da Unidade de Trabalho'
-        elif 'Unidade de Trabalho' in df_filtrado.columns:
-            coluna_unidade = 'Unidade de Trabalho'
-        elif 'Unidade' in df_filtrado.columns:
-            coluna_unidade = 'Unidade'
-        else:
-            st.error("Coluna de Unidade de Trabalho não encontrada no arquivo.")
-            adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
-            st.stop()
-        
-        # Exibir tabela de unidades
-        st.subheader("Tabela de Distribuição por Unidade de Trabalho")
-        
-        # Contagem por unidade no dataframe já filtrado
-        contagem = df_filtrado[coluna_unidade].value_counts()
-        percentual = (contagem / contagem.sum() * 100).round(2) if len(contagem) > 0 else pd.Series()
-        
-        tabela_unidades = pd.DataFrame({
-            'Unidade de Trabalho': contagem.index,
-            'Quantidade': contagem.values,
-            'Percentual (%)': percentual.values
-        })
-        
-        st.dataframe(tabela_unidades, use_container_width=True)
-        
-        # Opção para download da tabela
-        csv = tabela_unidades.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download da Tabela (CSV)",
-            data=csv,
-            file_name="tabela_unidades_cbmpr.csv",
-            mime="text/csv"
-        )
-        
-        # Adicionar seção de amostra de dados após as visualizações e análises
+    # Verificar qual coluna de unidade existe
+    if 'Descrição da Unidade de Trabalho' in df_filtrado.columns:
+        coluna_unidade = 'Descrição da Unidade de Trabalho'
+    elif 'Unidade de Trabalho' in df_filtrado.columns:
+        coluna_unidade = 'Unidade de Trabalho'
+    elif 'Unidade' in df_filtrado.columns:
+        coluna_unidade = 'Unidade'
+    else:
+        st.error("Coluna de Unidade de Trabalho não encontrada no arquivo.")
         adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
+        st.stop()
+    
+    # Exibir tabela de unidades - ordenada alfabeticamente
+    st.subheader("Tabela de Distribuição por Unidade de Trabalho")
+    
+    # Contagem por unidade no dataframe já filtrado
+    contagem = df_filtrado[coluna_unidade].value_counts()
+    percentual = (contagem / contagem.sum() * 100).round(2) if len(contagem) > 0 else pd.Series()
+    
+    # Criar dataframe com contagens e ordenar alfabeticamente
+    tabela_unidades = pd.DataFrame({
+        'Unidade de Trabalho': contagem.index,
+        'Quantidade': contagem.values,
+        'Percentual (%)': percentual.values
+    })
+    
+    # Ordenar por unidade (alfabética) em vez de por contagem
+    tabela_unidades = tabela_unidades.sort_values('Unidade de Trabalho')
+    
+    st.dataframe(tabela_unidades, use_container_width=True)
+    
+    # Opção para download da tabela
+    csv = tabela_unidades.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download da Tabela (CSV)",
+        data=csv,
+        file_name="tabela_unidades_cbmpr.csv",
+        mime="text/csv"
+    )
+    
+    # Adicionar seção de amostra de dados após as visualizações e análises
+    adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
 # Rodapé
 st.markdown("---")
