@@ -1,77 +1,4 @@
-else:  # Distribuição por Posto/Graduação
-    st.subheader("Distribuição por Posto/Graduação")
-    fig = criar_grafico_distribuicao_cargo(df, filtro_abono)
-    
-    if fig:
-        st.pyplot(fig)
-        
-        # Opção para download do gráfico
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        
-        st.download_button(
-            label="📥 Download do Gráfico (PNG)",
-            data=buf,
-            file_name="distribuicao_posto_graduacao_cbmpr.png",
-            mime="image/png"
-        )
-        
-        # Exibir tabela de cargos
-        st.subheader("Tabela de Distribuição por Posto/Graduação")
-        
-        # Aplicar filtro se necessário
-        df_filtrado = df.copy()
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-        
-        # Contagem por cargo
-        contagem = df_filtrado['Cargo'].value_counts()
-        percentual = (contagem / contagem.sum() * 100).round(2)
-        
-        tabela_cargos = pd.DataFrame({
-            'Posto/Graduação': contagem.index,
-            'Quantidade': contagem.values,
-            'Percentual (%)': percentual.values
-        })
-        
-        st.dataframe(tabela_cargos, use_container_width=True)
-        
-        # Opção para download da tabela
-        csv = tabela_cargos.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download da Tabela (CSV)",
-            data=csv,
-            file_name="tabela_postos_graduacoes_cbmpr.csv",
-            mime="text/csv"
-        )
-        
-        # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df, filtro_abono)# Função para adicionar a seção de amostra de dados filtrados
-def adicionar_secao_amostra_dados(df, filtro_abono):
-    """
-    Adiciona uma seção para visualizar e baixar amostra dos dados filtrados
-    """
-    # Aplicar filtro se necessário
-    df_filtrado = df.copy()
-    if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-        df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-    
-    # Mostrar amostra dos dados FILTRADOS
-    st.subheader("Amostra dos Dados")
-    with st.expander("Ver amostra dos dados"):
-        # Definir número de linhas a mostrar
-        num_linhas = min(10, len(df_filtrado))
-        st.dataframe(df_filtrado.head(num_linhas))
-        
-        # Opção para download dos dados filtrados
-        csv_dados = df_filtrado.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download dos Dados Filtrados (CSV)",
-            data=csv_dados,
-            file_name="dados_filtrados_cbmpr.csv",
-            mime="text/csv"
-        )import streamlit as st
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -125,6 +52,32 @@ st.markdown(f"""
     }}
 </style>
 """, unsafe_allow_html=True)
+
+# Função para adicionar a seção de amostra de dados filtrados
+def adicionar_secao_amostra_dados(df, filtro_abono):
+    """
+    Adiciona uma seção para visualizar e baixar amostra dos dados filtrados
+    """
+    # Aplicar filtro se necessário
+    df_filtrado = df.copy()
+    if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
+        df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
+    
+    # Mostrar amostra dos dados FILTRADOS
+    st.subheader("Amostra dos Dados")
+    with st.expander("Ver amostra dos dados"):
+        # Definir número de linhas a mostrar
+        num_linhas = min(10, len(df_filtrado))
+        st.dataframe(df_filtrado.head(num_linhas))
+        
+        # Opção para download dos dados filtrados
+        csv_dados = df_filtrado.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download dos Dados Filtrados (CSV)",
+            data=csv_dados,
+            file_name="dados_filtrados_cbmpr.csv",
+            mime="text/csv"
+        )
 
 # Função para processar o arquivo CSV
 def processar_arquivo_csv(uploaded_file):
@@ -742,39 +695,6 @@ elif tipo_grafico == "Distribuição por Faixas Etárias":
         
         # Adicionar seção de amostra de dados após as visualizações e análises
         adicionar_secao_amostra_dados(df, filtro_abono)
-        
-        # Opção para download da tabela
-        csv = tabela_faixas.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download da Tabela (CSV)",
-            data=csv,
-            file_name="tabela_faixas_etarias_cbmpr.csv",
-            mime="text/csv"
-        )st.subheader("Tabela de Faixas Etárias")
-        
-        # Remover valores nulos e aplicar filtro
-        df_filtrado = df.dropna(subset=['Idade'])
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-        
-        # Definir faixas etárias
-        bins = [18, 25, 30, 35, 40, 45, 50, 55, 60]
-        labels = ['18-25', '26-30', '31-35', '36-40', '41-45', '46-50', '51-55', '56+']
-        
-        # Categorizar idades
-        df_filtrado['Faixa Etária'] = pd.cut(df_filtrado['Idade'], bins=bins, labels=labels, right=True)
-        
-        # Contagem por faixa etária
-        contagem = df_filtrado['Faixa Etária'].value_counts().sort_index()
-        percentual = (contagem / contagem.sum() * 100).round(2)
-        
-        tabela_faixas = pd.DataFrame({
-            'Faixa Etária': contagem.index,
-            'Quantidade': contagem.values,
-            'Percentual (%)': percentual.values
-        })
-        
-        st.dataframe(tabela_faixas, use_container_width=True)
 
 else:  # Distribuição por Posto/Graduação
     st.subheader("Distribuição por Posto/Graduação")
@@ -824,21 +744,8 @@ else:  # Distribuição por Posto/Graduação
             mime="text/csv"
         )
         
-        # Mostrar amostra dos dados FILTRADOS
-        st.subheader("Amostra dos Dados")
-        with st.expander("Ver amostra dos dados"):
-            # Definir número de linhas a mostrar
-            num_linhas = min(10, len(df_filtrado))
-            st.dataframe(df_filtrado.head(num_linhas))
-            
-            # Opção para download dos dados filtrados
-            csv_dados = df_filtrado.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download dos Dados Filtrados (CSV)",
-                data=csv_dados,
-                file_name="dados_filtrados_cbmpr.csv",
-                mime="text/csv"
-            )
+        # Adicionar seção de amostra de dados após as visualizações e análises
+        adicionar_secao_amostra_dados(df, filtro_abono)
 
 # Rodapé
 st.markdown("---")
