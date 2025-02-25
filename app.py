@@ -33,6 +33,15 @@ st.markdown(f"""
     .stButton>button {{
         background-color: {cores_cbmpr['azul_escuro']};
         color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        transition: all 0.3s;
+    }}
+    .stButton>button:hover {{
+        background-color: {cores_cbmpr['vermelho']};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }}
     .stRadio label {{
         color: {cores_cbmpr['preto']};
@@ -46,9 +55,52 @@ st.markdown(f"""
     .stAlert {{
         background-color: {cores_cbmpr['cinza_claro']};
         color: {cores_cbmpr['preto']};
+        border-radius: 8px;
+    }}
+    .stMetric {{
+        background-color: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }}
     .stMetric label {{
         color: {cores_cbmpr['azul_escuro']};
+        font-weight: bold;
+    }}
+    .stMetric .metric-value {{
+        font-size: 24px;
+        font-weight: bold;
+        color: {cores_cbmpr['vermelho']};
+    }}
+    .stTabs {{
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }}
+    .stTab {{
+        background-color: white;
+    }}
+    .stTab[aria-selected="true"] {{
+        background-color: {cores_cbmpr['amarelo']};
+        color: {cores_cbmpr['preto']};
+        font-weight: bold;
+    }}
+    .stExpander {{
+        border-radius: 8px;
+        border: 1px solid {cores_cbmpr['cinza_claro']};
+    }}
+    .stDownloadButton>button {{
+        background-color: {cores_cbmpr['vermelho']};
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        transition: all 0.3s;
+    }}
+    .stDownloadButton>button:hover {{
+        background-color: {cores_cbmpr['azul_escuro']};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -452,7 +504,20 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     return fig
 
 # Interface principal do Streamlit
-st.title("🚒 Dashboard - Pessoal CBMPR")
+st.markdown(
+    f"""
+    <div style="
+        background: linear-gradient(135deg, {cores_cbmpr['azul_escuro']} 0%, {cores_cbmpr['vermelho']} 100%);
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    ">
+        <h1 style="color: white; text-align: center; margin: 0;">🚒 Dashboard - Pessoal CBMPR</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Inicializar session_state para gerenciar o estado da aplicação
 if 'filtros_cargo' not in st.session_state:
@@ -460,17 +525,81 @@ if 'filtros_cargo' not in st.session_state:
 if 'filtros_unidade' not in st.session_state:
     st.session_state.filtros_unidade = []
 
-st.markdown("""
-Este dashboard apresenta visualizações para os dados de pessoal do Corpo de Bombeiros Militar do Paraná. 
-Faça o upload do arquivo CSV gerado pela SEAP para visualizar as informações.
-
-**Formatos Suportados:**
-- Arquivos CSV com delimitador vírgula (,)
-- Arquivos CSV com delimitador ponto-e-vírgula (;)
-""")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['cinza_claro']}30;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid {cores_cbmpr['amarelo']};
+        margin-bottom: 20px;
+    ">
+        <p style="margin: 0; color: {cores_cbmpr['preto']};">
+            Este dashboard apresenta visualizações para os dados de pessoal do Corpo de Bombeiros Militar do Paraná. 
+            Faça o upload do arquivo CSV gerado pela SEAP para visualizar as informações.
+        </p>
+    </div>
+    
+    <div style="
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    ">
+        <div style="
+            background-color: {cores_cbmpr['azul_escuro']}; 
+            color: white; 
+            padding: 10px; 
+            border-radius: 5px;
+            width: 48%;
+            text-align: center;
+        ">
+            <strong>📄 Formato suportado:</strong> CSV com delimitador vírgula (,)
+        </div>
+        <div style="
+            background-color: {cores_cbmpr['vermelho']}; 
+            color: white; 
+            padding: 10px; 
+            border-radius: 5px;
+            width: 48%;
+            text-align: center;
+        ">
+            <strong>📄 Formato suportado:</strong> CSV com delimitador ponto-e-vírgula (;)
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Seção de upload de arquivo
-st.header("1. Carregar Arquivo")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['azul_escuro']};
+        padding: 12px 20px;
+        border-radius: 8px 8px 0 0;
+        margin-top: 30px;
+        margin-bottom: 0px;
+    ">
+        <h2 style="color: white; margin: 0; font-size: 1.5em;">1. Carregar Arquivo</h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Adicionar um fundo claro para a seção de upload
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['cinza_claro']}20;
+        padding: 20px;
+        border-radius: 0 0 8px 8px;
+        margin-bottom: 30px;
+        border: 1px solid {cores_cbmpr['cinza_claro']}60;
+    ">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Opção para usar dados simulados para teste
 usar_dados_teste = st.checkbox("Usar dados de exemplo para teste", value=False)
@@ -567,14 +696,14 @@ if usar_dados_teste:
     st.markdown(
         f"""
         <div style="
-            background-color: {cores_cbmpr['vermelho']};
+            background: linear-gradient(135deg, {cores_cbmpr['vermelho']} 0%, {cores_cbmpr['azul_escuro']} 100%);
             padding: 20px;
             border-radius: 10px;
             text-align: center;
             margin: 20px 0;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         ">
-            <h2 style="color: white; margin: 0;">Efetivo Total</h2>
+            <h2 style="color: white; margin: 0; font-weight: 400;">Efetivo Total</h2>
             <h1 style="color: white; font-size: 48px; margin: 10px 0;">{len(df)}</h1>
             <p style="color: white; margin: 0;">militares</p>
         </div>
@@ -620,7 +749,35 @@ else:
         st.stop()
 
 # Seção de Filtros
-st.header("2. Filtros")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['azul_escuro']};
+        padding: 12px 20px;
+        border-radius: 8px 8px 0 0;
+        margin-top: 30px;
+        margin-bottom: 0px;
+    ">
+        <h2 style="color: white; margin: 0; font-size: 1.5em;">2. Filtros</h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Adicionar um fundo claro para a seção de filtros
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['cinza_claro']}20;
+        padding: 10px 20px;
+        border-radius: 0 0 8px 8px;
+        margin-bottom: 20px;
+        border: 1px solid {cores_cbmpr['cinza_claro']}60;
+    ">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Inicializar variáveis de filtro
 filtros_cargo = []
@@ -804,7 +961,20 @@ with tab_unidade:
 df_filtrado = aplicar_filtros(df, filtro_abono, filtros_cargo, filtros_unidade)
 
 # Mostrar contadores com base nos filtros aplicados
-st.subheader("Estatísticas com base nos filtros aplicados")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['amarelo']};
+        padding: 12px 20px;
+        border-radius: 8px 8px 0 0;
+        margin-bottom: 0px;
+    ">
+        <h3 style="color: {cores_cbmpr['preto']}; margin: 0; font-size: 1.3em;">Estatísticas com base nos filtros aplicados</h3>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 total_original = len(df)
 total_filtrado = len(df_filtrado)
 
@@ -820,7 +990,21 @@ if 'Idade' in df_filtrado.columns:
     df_idade = df_filtrado.dropna(subset=['Idade'])
     
     if len(df_idade) > 0:  # Verificar se há dados após filtro
-        st.subheader("Estatísticas de Idade")
+        st.markdown(
+            f"""
+            <div style="
+                background-color: {cores_cbmpr['vermelho']};
+                padding: 12px 20px;
+                border-radius: 8px 8px 0 0;
+                margin-top: 20px;
+                margin-bottom: 0px;
+            ">
+                <h3 style="color: white; margin: 0; font-size: 1.3em;">Estatísticas de Idade</h3>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Idade Média", f"{df_idade['Idade'].mean():.1f} anos")
@@ -837,7 +1021,21 @@ if tem_coluna_abono:
     recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
     nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
     
-    st.subheader("Estatísticas de Abono Permanência")
+    st.markdown(
+        f"""
+        <div style="
+            background-color: {cores_cbmpr['cinza_escuro']};
+            padding: 12px 20px;
+            border-radius: 8px 8px 0 0;
+            margin-top: 20px;
+            margin-bottom: 0px;
+        ">
+            <h3 style="color: white; margin: 0; font-size: 1.3em;">Estatísticas de Abono Permanência</h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total com Filtros", f"{total}")
@@ -871,7 +1069,35 @@ if 'Idade' in df_filtrado.columns:
         )
 
 # Seção de visualização
-st.header("3. Visualizações")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['azul_escuro']};
+        padding: 12px 20px;
+        border-radius: 8px 8px 0 0;
+        margin-top: 30px;
+        margin-bottom: 0px;
+    ">
+        <h2 style="color: white; margin: 0; font-size: 1.5em;">3. Visualizações</h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Adicionar um fundo claro para a seção de visualização
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['cinza_claro']}20;
+        padding: 10px 20px;
+        border-radius: 0 0 8px 8px;
+        margin-bottom: 20px;
+        border: 1px solid {cores_cbmpr['cinza_claro']}60;
+    ">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Opções de visualização
 tipo_grafico = st.radio(
@@ -1037,14 +1263,21 @@ st.markdown("---")
 st.markdown(
     f"""
     <div style="
-        background-color: {cores_cbmpr['cinza_escuro']};
-        padding: 15px;
-        border-radius: 5px;
+        background: linear-gradient(135deg, {cores_cbmpr['cinza_escuro']} 0%, {cores_cbmpr['azul_escuro']} 100%);
+        padding: 25px;
+        border-radius: 10px;
         color: white;
         text-align: center;
+        margin-top: 40px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     ">
-        <p><strong>Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná</strong></p>
-        <p>💻 Para mais informações, consulte o repositório no GitHub</p>
+        <p style="margin-bottom: 10px;"><strong>Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná</strong></p>
+        <p style="margin: 0;">💻 Para mais informações, consulte o repositório no GitHub</p>
+        <div style="font-size: 30px; margin-top: 10px;">
+            <span style="margin: 0 10px; color: {cores_cbmpr['amarelo']};">🚒</span>
+            <span style="margin: 0 10px; color: {cores_cbmpr['vermelho']};">🔥</span>
+            <span style="margin: 0 10px; color: {cores_cbmpr['amarelo']};">🚒</span>
+        </div>
     </div>
     """,
     unsafe_allow_html=True
