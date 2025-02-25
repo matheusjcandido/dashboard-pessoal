@@ -1,17 +1,4 @@
-# Se houver filtro de abono, mostrar estatísticas específicas
-if tem_coluna_abono:
-    total = len(df_filtrado)
-    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
-    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
-    
-    st.subheader("Estatísticas de Abono Permanência")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total com Filtros", f"{total}")
-    with col2:
-        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
-    with col3:
-        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")import streamlit as st
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -630,6 +617,10 @@ else:
 # Seção de Filtros
 st.header("2. Filtros")
 
+# Inicializar variáveis de filtro
+filtros_cargo = []
+filtros_unidade = []
+
 # Aplicar função de filtragem
 def aplicar_filtros(dataframe, filtro_abono, filtros_cargo, filtros_unidade=None):
     """Aplica todos os filtros selecionados ao dataframe"""
@@ -734,7 +725,7 @@ with tab_cargo:
                         filtros_cargo.append(cargo)
     else:
         st.warning("Coluna 'Cargo' não encontrada no arquivo. O filtro por Posto/Graduação não está disponível.")
-        filtros_cargo = None
+        filtros_cargo = []
 
 # Tab 3: Filtro por Unidade de Trabalho
 with tab_unidade:
@@ -766,7 +757,7 @@ with tab_unidade:
         )
     else:
         st.warning("Coluna de Unidade de Trabalho não encontrada no arquivo. O filtro não está disponível.")
-        filtros_unidade = None
+        filtros_unidade = []
 
 # Aplicar os filtros ao dataframe
 df_filtrado = aplicar_filtros(df, filtro_abono, filtros_cargo, filtros_unidade)
@@ -781,6 +772,21 @@ with col1:
     st.metric("Total de Militares (Original)", f"{total_original}")
 with col2:
     st.metric("Total após filtros", f"{total_filtrado} ({total_filtrado/total_original*100:.1f}%)")
+
+# Se houver filtro de abono, mostrar estatísticas específicas
+if tem_coluna_abono:
+    total = len(df_filtrado)
+    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
+    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
+    
+    st.subheader("Estatísticas de Abono Permanência")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total com Filtros", f"{total}")
+    with col2:
+        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
+    with col3:
+        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
 
 # Adicionar estatísticas de idade
 if 'Idade' in df_filtrado.columns:
