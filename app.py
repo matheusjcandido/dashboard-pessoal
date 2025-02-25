@@ -8,8 +8,8 @@ import re
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard CBMPR - Efetivo",
-    page_icon="🚒",
+    page_title="Dashboard Pessoal CBMPR",
+    page_icon="🔥",
     layout="wide"
 )
 
@@ -452,7 +452,7 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     return fig
 
 # Interface principal do Streamlit
-st.title("🚒 Dashboard - Corpo de Bombeiros Militar do Paraná")
+st.title("🚒 Dashboard - Pessoal CBMPR")
 
 # Inicializar session_state para gerenciar o estado da aplicação
 if 'filtros_cargo' not in st.session_state:
@@ -461,8 +461,8 @@ if 'filtros_unidade' not in st.session_state:
     st.session_state.filtros_unidade = []
 
 st.markdown("""
-Este dashboard apresenta visualizações sobre os dados de pessoal do Corpo de Bombeiros Militar do Paraná.
-Faça o upload do arquivo CSV gerado pela SEAP para visualizar os gráficos.
+Este dashboard apresenta visualizações para os dados de pessoal do Corpo de Bombeiros Militar do Paraná. 
+Faça o upload do arquivo CSV gerado pela SEAP para visualizar as informações.
 
 **Formatos Suportados:**
 - Arquivos CSV com delimitador vírgula (,)
@@ -653,8 +653,8 @@ def aplicar_filtros(dataframe, filtro_abono, filtros_cargo, filtros_unidade=None
     
     return df_filtrado
 
-# Criar dois tabs para os diferentes tipos de filtros
-tab_abono, tab_cargo, tab_unidade = st.tabs(["Filtro por Abono", "Filtro por Posto/Graduação", "Filtro por Unidade"])
+# Criar tabs para os diferentes tipos de filtros
+tab_cargo, tab_unidade, tab_abono = st.tabs(["Filtro por Posto/Graduação", "Filtro por Unidade", "Filtro por Abono"])
 
 # Tab 1: Filtro de Abono Permanência
 with tab_abono:
@@ -814,21 +814,6 @@ with col1:
 with col2:
     st.metric("Total após filtros", f"{total_filtrado} ({total_filtrado/total_original*100:.1f}%)")
 
-# Se houver filtro de abono, mostrar estatísticas específicas
-if tem_coluna_abono:
-    total = len(df_filtrado)
-    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
-    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
-    
-    st.subheader("Estatísticas de Abono Permanência")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total com Filtros", f"{total}")
-    with col2:
-        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
-    with col3:
-        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
-
 # Adicionar estatísticas de idade
 if 'Idade' in df_filtrado.columns:
     # Remover valores nulos para cálculos
@@ -845,6 +830,21 @@ if 'Idade' in df_filtrado.columns:
             st.metric("Idade Mínima", f"{df_idade['Idade'].min():.0f} anos")
         with col4:
             st.metric("Idade Máxima", f"{df_idade['Idade'].max():.0f} anos")
+
+# Se houver filtro de abono, mostrar estatísticas específicas
+if tem_coluna_abono:
+    total = len(df_filtrado)
+    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
+    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
+    
+    st.subheader("Estatísticas de Abono Permanência")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total com Filtros", f"{total}")
+    with col2:
+        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
+    with col3:
+        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
 
 # Adicionar opção para download das estatísticas gerais
 if 'Idade' in df_filtrado.columns:
