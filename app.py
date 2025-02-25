@@ -292,21 +292,6 @@ def criar_grafico_faixas_etarias(df, filtro_abono=None):
     # Criar gráfico de barras
     bars = ax.bar(contagem.index, contagem.values, color=cores_barras[:len(contagem)])
     
-    # Adicionar rótulos em cima das barras
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + 5,
-                f'{height:,}', ha='center', va='bottom')
-    
-    # Adicionar percentuais
-    total = contagem.sum()
-    percentuais = contagem / total * 100
-    
-    for i, (bar, pct) in enumerate(zip(bars, percentuais)):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height / 2,
-                f'{pct:.1f}%', ha='center', va='center', color='white', fontweight='bold')
-    
     # Adicionar títulos e ajustes visuais
     titulo = 'Distribuição por Faixas Etárias - Corpo de Bombeiros Militar do Paraná'
     if filtro_abono == 'S':
@@ -371,22 +356,6 @@ def criar_grafico_distribuicao_unidade(df, filtro_abono=None):
     
     # Criar gráfico de barras horizontais
     bars = ax.barh(contagem_unidade.index, contagem_unidade.values, color=cores_mapeadas)
-    
-    # Adicionar rótulos nas barras
-    for bar in bars:
-        width = bar.get_width()
-        ax.text(width + 5, bar.get_y() + bar.get_height()/2, 
-                f'{width:,}', va='center')
-    
-    # Adicionar percentuais
-    total = contagem_unidade.sum()
-    for i, bar in enumerate(bars):
-        width = bar.get_width()
-        percentual = (width / total) * 100
-        if percentual >= 2:  # Mostrar percentual apenas para barras maiores
-            ax.text(width / 2, bar.get_y() + bar.get_height()/2, 
-                    f'{percentual:.1f}%', va='center', ha='center', 
-                    color='white', fontweight='bold')
     
     # Adicionar títulos e ajustes visuais
     titulo = f'Distribuição por Unidade de Trabalho - Corpo de Bombeiros Militar do Paraná{titulo_extra}'
@@ -464,22 +433,6 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     
     # Criar gráfico de barras horizontais com as cores personalizadas
     bars = ax.barh(contagem_cargo.index, contagem_cargo.values, color=cores_mapeadas)
-    
-    # Adicionar rótulos nas barras
-    for bar in bars:
-        width = bar.get_width()
-        ax.text(width + 5, bar.get_y() + bar.get_height()/2, 
-                f'{width:,}', va='center')
-    
-    # Adicionar percentuais
-    total = contagem_cargo.sum()
-    for i, bar in enumerate(bars):
-        width = bar.get_width()
-        percentual = (width / total) * 100
-        if percentual >= 2:  # Mostrar percentual apenas para barras maiores
-            ax.text(width / 2, bar.get_y() + bar.get_height()/2, 
-                    f'{percentual:.1f}%', va='center', ha='center', 
-                    color='white', fontweight='bold')
     
     # Adicionar títulos e ajustes visuais
     titulo = 'Distribuição por Posto/Graduação - Corpo de Bombeiros Militar do Paraná'
