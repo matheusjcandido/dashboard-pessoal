@@ -54,24 +54,20 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Função para adicionar a seção de amostra de dados filtrados
-def adicionar_secao_amostra_dados(df, filtro_abono):
+def adicionar_secao_amostra_dados(df, filtro_abono=None):
     """
     Adiciona uma seção para visualizar e baixar amostra dos dados filtrados
+    O dataframe df já deve estar com todos os filtros aplicados
     """
-    # Aplicar filtro se necessário
-    df_filtrado = df.copy()
-    if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-        df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-    
     # Mostrar amostra dos dados FILTRADOS
     st.subheader("Amostra dos Dados")
     with st.expander("Ver amostra dos dados"):
         # Definir número de linhas a mostrar
-        num_linhas = min(10, len(df_filtrado))
-        st.dataframe(df_filtrado.head(num_linhas))
+        num_linhas = min(10, len(df))
+        st.dataframe(df.head(num_linhas))
         
-        # Opção para download dos dados filtrados
-        csv_dados = df_filtrado.to_csv(index=False).encode('utf-8')
+        # Opção para download dos dados filtrados completos
+        csv_dados = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download dos Dados Filtrados (CSV)",
             data=csv_dados,
@@ -618,38 +614,130 @@ else:
         st.info("Por favor, faça upload de um arquivo CSV ou use os dados de exemplo.")
         st.stop()
 
-# Filtro de Abono Permanência
+# Seção de Filtros
 st.header("2. Filtros")
 
-# Verificar se a coluna de Abono está presente
-tem_coluna_abono = 'Recebe Abono Permanência' in df.columns
+# Aplicar função de filtragem
+def aplicar_filtros(dataframe, filtro_abono, filtros_cargo):
+    """Aplica todos os filtros selecionados ao dataframe"""
+    df_filtrado = dataframe.copy()
+    
+    # Aplicar filtro de abono, se houver
+    if filtro_abono is not None and 'Recebe Abono Permanência' in dataframe.columns:
+        df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
+    
+    # Aplicar filtro de cargos, se houver
+    if filtros_cargo and 'Cargo' in dataframe.columns:
+        df_filtrado = df_filtrado[df_filtrado['Cargo'].isin(filtros_cargo)]
+    
+    return df_filtrado
 
-if tem_coluna_abono:
-    opcoes_abono = ["Todos", "Apenas que recebem", "Apenas que não recebem"]
-    filtro_escolhido = st.radio("Filtrar por Abono Permanência:", opcoes_abono)
-    
-    if filtro_escolhido == "Todos":
+# Criar dois tabs para os diferentes tipos de filtros
+tab_abono, tab_cargo = st.tabs(["Filtro por Abono Permanência", "Filtro por Posto/Graduação"])
+
+# Tab 1: Filtro de Abono Permanência
+with tab_abono:
+    # Verificar se a coluna de Abono está presente
+    tem_coluna_abono = 'Recebe Abono Permanência' in df.columns
+
+    if tem_coluna_abono:
+        opcoes_abono = ["Todos", "Apenas que recebem", "Apenas que não recebem"]
+        filtro_escolhido = st.radio("Filtrar por Abono Permanência:", opcoes_abono)
+        
+        if filtro_escolhido == "Todos":
+            filtro_abono = None
+        elif filtro_escolhido == "Apenas que recebem":
+            filtro_abono = 'S'
+        else:  # "Apenas que não recebem"
+            filtro_abono = 'N'
+    else:
+        st.warning("Coluna 'Recebe Abono Permanência' não encontrada no arquivo. O filtro não está disponível.")
         filtro_abono = None
-    elif filtro_escolhido == "Apenas que recebem":
-        filtro_abono = 'S'
-    else:  # "Apenas que não recebem"
-        filtro_abono = 'N'
-    
-    # Mostrar contadores
-    total = len(df)
-    recebe = len(df[df['Recebe Abono Permanência'] == 'S'])
-    nao_recebe = len(df[df['Recebe Abono Permanência'] == 'N'])
+
+# Tab 2: Filtro por Posto/Graduação
+with tab_cargo:
+    if 'Cargo' in df.columns:
+        # Obter lista única de postos/graduações
+        cargos = df['Cargo'].unique()
+        
+        # Ordenar os cargos conforme hierarquia militar específica
+        hierarquia = [
+            'Coronel', 'Tenente Coronel', 'Major', 'Capitão', '1º Tenente', '2º Tenente', '2º Tenente 6',
+            'Aspirante a Oficial', 'Aluno de 3º Ano', 'Aluno de 2º Ano', 'Aluno de 1º Ano', 'Subtenente', 
+            '1º Sargento', '2º Sargento', '3º Sargento', 'Cabo', 'Soldado 1ª Classe', 'Soldado 2ª Classe'
+        ]
+        
+        # Ordenar cargos conforme hierarquia
+        cargos_ordenados = []
+        for rank in hierarquia:
+            for cargo in cargos:
+                if rank in cargo and cargo not in cargos_ordenados:
+                    cargos_ordenados.append(cargo)
+        
+        # Adicionar quaisquer outros cargos que não se encaixam na hierarquia padrão
+        for cargo in cargos:
+            if cargo not in cargos_ordenados:
+                cargos_ordenados.append(cargo)
+        
+        # Opção para selecionar todos ou nenhum
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Selecionar Todos"):
+                filtros_cargo = cargos_ordenados
+        with col2:
+            if st.button("Limpar Seleção"):
+                filtros_cargo = []
+        
+        # Verificar se há muitos cargos e criar selectbox com multiselect ou usar checkboxes
+        if len(cargos_ordenados) > 10:
+            # Usar multiselect para muitos cargos
+            filtros_cargo = st.multiselect(
+                "Selecione os Postos/Graduações:",
+                options=cargos_ordenados,
+                default=cargos_ordenados  # Inicialmente todos selecionados
+            )
+        else:
+            # Para poucos cargos, usar checkboxes
+            st.write("Selecione os Postos/Graduações:")
+            filtros_cargo = []
+            # Organizar em 2 colunas
+            cols = st.columns(2)
+            for i, cargo in enumerate(cargos_ordenados):
+                col_idx = i % 2
+                with cols[col_idx]:
+                    if st.checkbox(cargo, value=True):
+                        filtros_cargo.append(cargo)
+    else:
+        st.warning("Coluna 'Cargo' não encontrada no arquivo. O filtro por Posto/Graduação não está disponível.")
+        filtros_cargo = None
+
+# Aplicar os filtros ao dataframe
+df_filtrado = aplicar_filtros(df, filtro_abono, filtros_cargo)
+
+# Mostrar contadores com base nos filtros aplicados
+st.subheader("Estatísticas com base nos filtros aplicados")
+total_original = len(df)
+total_filtrado = len(df_filtrado)
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("Total de Militares (Original)", f"{total_original}")
+with col2:
+    st.metric("Total após filtros", f"{total_filtrado} ({total_filtrado/total_original*100:.1f}%)")
+
+# Se houver filtro de abono, mostrar estatísticas específicas
+if tem_coluna_abono:
+    total = len(df_filtrado)
+    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
+    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Total de Militares", f"{total}")
+        st.metric("Total com Filtros", f"{total}")
     with col2:
-        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}%)")
+        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
     with col3:
-        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}%)")
-else:
-    st.warning("Coluna 'Recebe Abono Permanência' não encontrada no arquivo. O filtro não está disponível.")
-    filtro_abono = None
+        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
 
 # Seção de visualização
 st.header("3. Visualizações")
@@ -663,9 +751,11 @@ tipo_grafico = st.radio(
      "Distribuição por Unidade de Trabalho"]
 )
 
+# Nota: A partir daqui, usamos df_filtrado em vez de df para visualizações
 if tipo_grafico == "Distribuição por Idade (Histograma)":
     st.subheader("Distribuição de Idades")
-    fig = criar_grafico_distribuicao_idade(df, filtro_abono)
+    # Criar gráfico usando o dataframe já filtrado
+    fig = criar_grafico_distribuicao_idade(df_filtrado, None)  # Filtro de abono já aplicado no df_filtrado
     
     if fig:
         st.pyplot(fig)
@@ -685,30 +775,28 @@ if tipo_grafico == "Distribuição por Idade (Histograma)":
         # Exibir estatísticas em colunas
         st.subheader("Estatísticas")
         
-        # Remover valores nulos e aplicar filtro
-        df_filtrado = df.dropna(subset=['Idade'])
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
+        # Remover valores nulos 
+        df_idade = df_filtrado.dropna(subset=['Idade'])
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Idade Média", f"{df_filtrado['Idade'].mean():.1f} anos")
+            st.metric("Idade Média", f"{df_idade['Idade'].mean():.1f} anos")
         with col2:
-            st.metric("Idade Mediana", f"{df_filtrado['Idade'].median():.1f} anos")
+            st.metric("Idade Mediana", f"{df_idade['Idade'].median():.1f} anos")
         with col3:
-            st.metric("Idade Mínima", f"{df_filtrado['Idade'].min():.0f} anos")
+            st.metric("Idade Mínima", f"{df_idade['Idade'].min():.0f} anos")
         with col4:
-            st.metric("Idade Máxima", f"{df_filtrado['Idade'].max():.0f} anos")
+            st.metric("Idade Máxima", f"{df_idade['Idade'].max():.0f} anos")
         
         # Tabela de estatísticas para download
         estatisticas = pd.DataFrame({
             'Estatística': ['Média', 'Mediana', 'Mínima', 'Máxima', 'Total de Militares'],
             'Valor': [
-                f"{df_filtrado['Idade'].mean():.1f} anos",
-                f"{df_filtrado['Idade'].median():.1f} anos",
-                f"{df_filtrado['Idade'].min():.0f} anos",
-                f"{df_filtrado['Idade'].max():.0f} anos",
-                f"{len(df_filtrado)}"
+                f"{df_idade['Idade'].mean():.1f} anos",
+                f"{df_idade['Idade'].median():.1f} anos",
+                f"{df_idade['Idade'].min():.0f} anos",
+                f"{df_idade['Idade'].max():.0f} anos",
+                f"{len(df_idade)}"
             ]
         })
         
@@ -721,11 +809,12 @@ if tipo_grafico == "Distribuição por Idade (Histograma)":
         )
         
         # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df, filtro_abono)
+        adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
 elif tipo_grafico == "Distribuição por Faixas Etárias":
     st.subheader("Distribuição por Faixas Etárias")
-    fig = criar_grafico_faixas_etarias(df, filtro_abono)
+    # Usar dataframe já filtrado
+    fig = criar_grafico_faixas_etarias(df_filtrado, None)  # Filtro já aplicado
     
     if fig:
         st.pyplot(fig)
@@ -745,21 +834,19 @@ elif tipo_grafico == "Distribuição por Faixas Etárias":
         # Exibir tabela de faixas etárias
         st.subheader("Tabela de Faixas Etárias")
         
-        # Remover valores nulos e aplicar filtro
-        df_filtrado = df.dropna(subset=['Idade'])
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
+        # Remover valores nulos do dataframe já filtrado
+        df_idade = df_filtrado.dropna(subset=['Idade'])
         
         # Definir faixas etárias
         bins = [18, 25, 30, 35, 40, 45, 50, 55, 60]
         labels = ['18-25', '26-30', '31-35', '36-40', '41-45', '46-50', '51-55', '56+']
         
         # Categorizar idades
-        df_filtrado['Faixa Etária'] = pd.cut(df_filtrado['Idade'], bins=bins, labels=labels, right=True)
+        df_idade['Faixa Etária'] = pd.cut(df_idade['Idade'], bins=bins, labels=labels, right=True)
         
         # Contagem por faixa etária
-        contagem = df_filtrado['Faixa Etária'].value_counts().sort_index()
-        percentual = (contagem / contagem.sum() * 100).round(2)
+        contagem = df_idade['Faixa Etária'].value_counts().sort_index()
+        percentual = (contagem / contagem.sum() * 100).round(2) if len(contagem) > 0 else pd.Series()
         
         tabela_faixas = pd.DataFrame({
             'Faixa Etária': contagem.index,
@@ -779,11 +866,12 @@ elif tipo_grafico == "Distribuição por Faixas Etárias":
         )
         
         # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df, filtro_abono)
+        adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
 elif tipo_grafico == "Distribuição por Posto/Graduação":
     st.subheader("Distribuição por Posto/Graduação")
-    fig = criar_grafico_distribuicao_cargo(df, filtro_abono)
+    # Usar dataframe já filtrado
+    fig = criar_grafico_distribuicao_cargo(df_filtrado, None)  # Filtro já aplicado
     
     if fig:
         st.pyplot(fig)
@@ -803,14 +891,9 @@ elif tipo_grafico == "Distribuição por Posto/Graduação":
         # Exibir tabela de cargos
         st.subheader("Tabela de Distribuição por Posto/Graduação")
         
-        # Aplicar filtro se necessário
-        df_filtrado = df.copy()
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-        
-        # Contagem por cargo
+        # Contagem por cargo no dataframe já filtrado
         contagem = df_filtrado['Cargo'].value_counts()
-        percentual = (contagem / contagem.sum() * 100).round(2)
+        percentual = (contagem / contagem.sum() * 100).round(2) if len(contagem) > 0 else pd.Series()
         
         tabela_cargos = pd.DataFrame({
             'Posto/Graduação': contagem.index,
@@ -830,11 +913,12 @@ elif tipo_grafico == "Distribuição por Posto/Graduação":
         )
         
         # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df, filtro_abono)
+        adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
 else:  # Distribuição por Unidade de Trabalho
     st.subheader("Distribuição por Unidade de Trabalho")
-    fig = criar_grafico_distribuicao_unidade(df, filtro_abono)
+    # Usar dataframe já filtrado
+    fig = criar_grafico_distribuicao_unidade(df_filtrado, None)  # Filtro já aplicado
     
     if fig:
         st.pyplot(fig)
@@ -852,28 +936,23 @@ else:  # Distribuição por Unidade de Trabalho
         )
         
         # Verificar qual coluna de unidade existe
-        if 'Descrição da Unidade de Trabalho' in df.columns:
+        if 'Descrição da Unidade de Trabalho' in df_filtrado.columns:
             coluna_unidade = 'Descrição da Unidade de Trabalho'
-        elif 'Unidade de Trabalho' in df.columns:
+        elif 'Unidade de Trabalho' in df_filtrado.columns:
             coluna_unidade = 'Unidade de Trabalho'
-        elif 'Unidade' in df.columns:
+        elif 'Unidade' in df_filtrado.columns:
             coluna_unidade = 'Unidade'
         else:
             st.error("Coluna de Unidade de Trabalho não encontrada no arquivo.")
-            adicionar_secao_amostra_dados(df, filtro_abono)
+            adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
             st.stop()
         
         # Exibir tabela de unidades
         st.subheader("Tabela de Distribuição por Unidade de Trabalho")
         
-        # Aplicar filtro se necessário
-        df_filtrado = df.copy()
-        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
-            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
-        
-        # Contagem por unidade
+        # Contagem por unidade no dataframe já filtrado
         contagem = df_filtrado[coluna_unidade].value_counts()
-        percentual = (contagem / contagem.sum() * 100).round(2)
+        percentual = (contagem / contagem.sum() * 100).round(2) if len(contagem) > 0 else pd.Series()
         
         tabela_unidades = pd.DataFrame({
             'Unidade de Trabalho': contagem.index,
@@ -893,7 +972,7 @@ else:  # Distribuição por Unidade de Trabalho
         )
         
         # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df, filtro_abono)
+        adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
 # Rodapé
 st.markdown("---")
