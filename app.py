@@ -279,6 +279,90 @@ def criar_grafico_faixas_etarias(df, filtro_abono=None):
     plt.tight_layout()
     return fig
 
+# Função para criar o gráfico de distribuição por Unidade de Trabalho
+def criar_grafico_distribuicao_unidade(df, filtro_abono=None):
+    """
+    Cria um gráfico de barras horizontais para visualizar a distribuição de militares por unidade de trabalho
+    """
+    # Verificar se a coluna de unidade de trabalho existe
+    if 'Descrição da Unidade de Trabalho' in df.columns:
+        coluna_unidade = 'Descrição da Unidade de Trabalho'
+    elif 'Unidade de Trabalho' in df.columns:
+        coluna_unidade = 'Unidade de Trabalho'
+    elif 'Unidade' in df.columns:
+        coluna_unidade = 'Unidade'
+    else:
+        st.error("Coluna de Unidade de Trabalho não encontrada no arquivo.")
+        return None
+    
+    # Aplicar filtro de abono se solicitado
+    df_unidade = df.copy()
+    if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
+        df_unidade = df_unidade[df_unidade['Recebe Abono Permanência'] == filtro_abono]
+    
+    # Contagem por unidade
+    contagem_unidade = df_unidade[coluna_unidade].value_counts()
+    
+    # Limitar para mostrar apenas as 20 maiores unidades se houver muitas
+    if len(contagem_unidade) > 20:
+        contagem_unidade = contagem_unidade.head(20)
+        titulo_extra = " (20 maiores unidades)"
+    else:
+        titulo_extra = ""
+    
+    # Criar figura - garantindo espaço suficiente para os nomes das unidades
+    altura_grafico = max(10, len(contagem_unidade) * 0.5)  # Ajusta a altura com base no número de unidades
+    fig, ax = plt.subplots(figsize=(14, altura_grafico))
+    
+    # Criar um ciclo de cores
+    cores_unidades = [
+        cores_cbmpr['azul_escuro'], 
+        cores_cbmpr['vermelho'], 
+        cores_cbmpr['amarelo'],
+        cores_cbmpr['cinza_escuro'], 
+        cores_cbmpr['cinza_claro'],
+        cores_cbmpr['preto']
+    ]
+    
+    # Criar mapeamento de cores
+    cores_mapeadas = [cores_unidades[i % len(cores_unidades)] for i in range(len(contagem_unidade))]
+    
+    # Criar gráfico de barras horizontais
+    bars = ax.barh(contagem_unidade.index, contagem_unidade.values, color=cores_mapeadas)
+    
+    # Adicionar rótulos nas barras
+    for bar in bars:
+        width = bar.get_width()
+        ax.text(width + 5, bar.get_y() + bar.get_height()/2, 
+                f'{width:,}', va='center')
+    
+    # Adicionar percentuais
+    total = contagem_unidade.sum()
+    for i, bar in enumerate(bars):
+        width = bar.get_width()
+        percentual = (width / total) * 100
+        if percentual >= 2:  # Mostrar percentual apenas para barras maiores
+            ax.text(width / 2, bar.get_y() + bar.get_height()/2, 
+                    f'{percentual:.1f}%', va='center', ha='center', 
+                    color='white', fontweight='bold')
+    
+    # Adicionar títulos e ajustes visuais
+    titulo = f'Distribuição por Unidade de Trabalho - Corpo de Bombeiros Militar do Paraná{titulo_extra}'
+    if filtro_abono == 'S':
+        titulo += ' (Com Abono Permanência)'
+    elif filtro_abono == 'N':
+        titulo += ' (Sem Abono Permanência)'
+    ax.set_title(titulo, fontsize=16)
+    ax.set_xlabel('Quantidade de Militares', fontsize=12)
+    ax.set_ylabel('Unidade de Trabalho', fontsize=12)
+    
+    # Adicionar grade apenas no eixo x
+    ax.grid(axis='x', alpha=0.3)
+    ax.set_axisbelow(True)
+    
+    plt.tight_layout()
+    return fig
+
 # Função para criar o gráfico de distribuição por Cargo (Posto/Graduação)
 def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     if 'Cargo' not in df.columns:
@@ -575,7 +659,8 @@ tipo_grafico = st.radio(
     "Escolha o tipo de visualização:",
     ["Distribuição por Idade (Histograma)", 
      "Distribuição por Faixas Etárias", 
-     "Distribuição por Posto/Graduação"]
+     "Distribuição por Posto/Graduação",
+     "Distribuição por Unidade de Trabalho"]
 )
 
 if tipo_grafico == "Distribuição por Idade (Histograma)":
@@ -696,7 +781,7 @@ elif tipo_grafico == "Distribuição por Faixas Etárias":
         # Adicionar seção de amostra de dados após as visualizações e análises
         adicionar_secao_amostra_dados(df, filtro_abono)
 
-else:  # Distribuição por Posto/Graduação
+elif tipo_grafico == "Distribuição por Posto/Graduação":
     st.subheader("Distribuição por Posto/Graduação")
     fig = criar_grafico_distribuicao_cargo(df, filtro_abono)
     
@@ -741,6 +826,69 @@ else:  # Distribuição por Posto/Graduação
             label="📥 Download da Tabela (CSV)",
             data=csv,
             file_name="tabela_postos_graduacoes_cbmpr.csv",
+            mime="text/csv"
+        )
+        
+        # Adicionar seção de amostra de dados após as visualizações e análises
+        adicionar_secao_amostra_dados(df, filtro_abono)
+
+else:  # Distribuição por Unidade de Trabalho
+    st.subheader("Distribuição por Unidade de Trabalho")
+    fig = criar_grafico_distribuicao_unidade(df, filtro_abono)
+    
+    if fig:
+        st.pyplot(fig)
+        
+        # Opção para download do gráfico
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+        buf.seek(0)
+        
+        st.download_button(
+            label="📥 Download do Gráfico (PNG)",
+            data=buf,
+            file_name="distribuicao_unidades_cbmpr.png",
+            mime="image/png"
+        )
+        
+        # Verificar qual coluna de unidade existe
+        if 'Descrição da Unidade de Trabalho' in df.columns:
+            coluna_unidade = 'Descrição da Unidade de Trabalho'
+        elif 'Unidade de Trabalho' in df.columns:
+            coluna_unidade = 'Unidade de Trabalho'
+        elif 'Unidade' in df.columns:
+            coluna_unidade = 'Unidade'
+        else:
+            st.error("Coluna de Unidade de Trabalho não encontrada no arquivo.")
+            adicionar_secao_amostra_dados(df, filtro_abono)
+            st.stop()
+        
+        # Exibir tabela de unidades
+        st.subheader("Tabela de Distribuição por Unidade de Trabalho")
+        
+        # Aplicar filtro se necessário
+        df_filtrado = df.copy()
+        if filtro_abono is not None and 'Recebe Abono Permanência' in df.columns:
+            df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == filtro_abono]
+        
+        # Contagem por unidade
+        contagem = df_filtrado[coluna_unidade].value_counts()
+        percentual = (contagem / contagem.sum() * 100).round(2)
+        
+        tabela_unidades = pd.DataFrame({
+            'Unidade de Trabalho': contagem.index,
+            'Quantidade': contagem.values,
+            'Percentual (%)': percentual.values
+        })
+        
+        st.dataframe(tabela_unidades, use_container_width=True)
+        
+        # Opção para download da tabela
+        csv = tabela_unidades.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download da Tabela (CSV)",
+            data=csv,
+            file_name="tabela_unidades_cbmpr.csv",
             mime="text/csv"
         )
         
