@@ -90,8 +90,8 @@ def adicionar_secao_amostra_dados(df, filtro_abono=None):
     # Mostrar amostra dos dados FILTRADOS
     st.subheader("Amostra dos Dados")
     with st.expander("Ver amostra dos dados"):
-        # Exibir todos os dados com opção de rolagem
-        st.dataframe(df_ordenado, height=400, use_container_width=True)
+        # Exibir todos os dados com opção de rolagem, sem mostrar o índice
+        st.dataframe(df_ordenado, height=400, use_container_width=True, hide_index=True)
         
         # Mostrar contador de linhas
         st.info(f"Mostrando todos os {len(df_ordenado)} registros. Use a barra de rolagem para navegar.")
@@ -925,7 +925,7 @@ if tipo_grafico == "Distribuição por Faixas Etárias":
             'Percentual (%)': percentual.values
         })
         
-        st.dataframe(tabela_faixas, use_container_width=True)
+        st.dataframe(tabela_faixas, use_container_width=True, hide_index=True)
         
         # Opção para download da tabela
         csv = tabela_faixas.to_csv(index=False).encode('utf-8')
@@ -972,7 +972,7 @@ elif tipo_grafico == "Distribuição por Posto/Graduação":
             'Percentual (%)': percentual.values
         })
         
-        st.dataframe(tabela_cargos, use_container_width=True)
+        st.dataframe(tabela_cargos, use_container_width=True, hide_index=True)
         
         # Opção para download da tabela
         csv = tabela_cargos.to_csv(index=False).encode('utf-8')
@@ -1018,7 +1018,7 @@ else:  # Distribuição por Unidade de Trabalho
     # Ordenar por unidade (alfabética) em vez de por contagem
     tabela_unidades = tabela_unidades.sort_values('Unidade de Trabalho')
     
-    st.dataframe(tabela_unidades, use_container_width=True)
+    st.dataframe(tabela_unidades, use_container_width=True, hide_index=True)
     
     # Opção para download da tabela
     csv = tabela_unidades.to_csv(index=False).encode('utf-8')
