@@ -90,9 +90,11 @@ def adicionar_secao_amostra_dados(df, filtro_abono=None):
     # Mostrar amostra dos dados FILTRADOS
     st.subheader("Amostra dos Dados")
     with st.expander("Ver amostra dos dados"):
-        # Definir número de linhas a mostrar
-        num_linhas = min(10, len(df_ordenado))
-        st.dataframe(df_ordenado.head(num_linhas))
+        # Exibir todos os dados com opção de rolagem
+        st.dataframe(df_ordenado, height=400, use_container_width=True)
+        
+        # Mostrar contador de linhas
+        st.info(f"Mostrando todos os {len(df_ordenado)} registros. Use a barra de rolagem para navegar.")
         
         # Opção para download dos dados filtrados completos (também ordenados)
         csv_dados = df_ordenado.to_csv(index=False).encode('utf-8')
