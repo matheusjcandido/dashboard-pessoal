@@ -375,11 +375,11 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     # Contagem por cargo
     contagem_cargo = df_cargo['Cargo'].value_counts()
     
-    # Ordenar os cargos conforme hierarquia militar específica solicitada (INVERSA da original)
+    # Ordenar os cargos conforme hierarquia militar específica (ordem correta com Coronel no topo)
     hierarquia = [
-        'Coronel', 'Tenente Coronel', 'Major', 'Capitão', '1º Tenente', '2º Tenente', '2º Tenente 6',
-        'Aspirante a Oficial', 'Aluno de 3º Ano', 'Aluno de 2º Ano', 'Aluno de 1º Ano', 'Subtenente', 
-        '1º Sargento', '2º Sargento', '3º Sargento', 'Cabo', 'Soldado 1ª Classe', 'Soldado 2ª Classe'
+        'Soldado 2ª Classe', 'Soldado 1ª Classe', 'Cabo', '3º Sargento', '2º Sargento', '1º Sargento',
+        'Subtenente', 'Aluno de 1º Ano', 'Aluno de 2º Ano', 'Aluno de 3º Ano', 'Aspirante a Oficial',
+        '2º Tenente 6', '2º Tenente', '1º Tenente', 'Capitão', 'Major', 'Tenente Coronel', 'Coronel'
     ]
     
     # Filtrar e reordenar os cargos encontrados conforme a hierarquia
@@ -403,9 +403,9 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     # Criar figura - garantindo espaço suficiente para os nomes dos cargos
     fig, ax = plt.subplots(figsize=(14, 10))
     
-    # Definir cores personalizadas com base na imagem fornecida
-    # Azul escuro, vermelho, amarelo, cinza escuro, cinza claro, branco, preto
-    cores_cbmpr = ['#062733', '#D34339', '#FFD928', '#606062', '#A39B96', '#FEFEFE', '#373435']
+    # Definir cores personalizadas sem usar branco
+    # Azul escuro, vermelho, amarelo, cinza escuro, cinza claro, verde, preto
+    cores_cbmpr = ['#062733', '#D34339', '#FFD928', '#606062', '#A39B96', '#2E8B57', '#373435']
     
     # Criar um mapeamento de cores para cada posto/graduação
     n_cargos = len(contagem_cargo)
@@ -676,11 +676,11 @@ with tab_cargo:
         # Obter lista única de postos/graduações
         cargos = df['Cargo'].unique()
         
-        # Ordenar os cargos conforme hierarquia militar específica
+        # Ordenar os cargos conforme hierarquia militar específica (com Coronel no topo)
         hierarquia = [
-            'Coronel', 'Tenente Coronel', 'Major', 'Capitão', '1º Tenente', '2º Tenente', '2º Tenente 6',
-            'Aspirante a Oficial', 'Aluno de 3º Ano', 'Aluno de 2º Ano', 'Aluno de 1º Ano', 'Subtenente', 
-            '1º Sargento', '2º Sargento', '3º Sargento', 'Cabo', 'Soldado 1ª Classe', 'Soldado 2ª Classe'
+            'Soldado 2ª Classe', 'Soldado 1ª Classe', 'Cabo', '3º Sargento', '2º Sargento', '1º Sargento',
+            'Subtenente', 'Aluno de 1º Ano', 'Aluno de 2º Ano', 'Aluno de 3º Ano', 'Aspirante a Oficial',
+            '2º Tenente 6', '2º Tenente', '1º Tenente', 'Capitão', 'Major', 'Tenente Coronel', 'Coronel'
         ]
         
         # Ordenar cargos conforme hierarquia
