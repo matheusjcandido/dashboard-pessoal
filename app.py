@@ -237,13 +237,17 @@ def gerar_estatisticas(df):
     total_efetivo = len(df)
     
     # Verificar se a coluna de idade existe e tem dados válidos
-    if 'Idade' in df.columns and not df['Idade'].isna().all():
-        # Converter para numérico, ignorando erros
-        idades_validas = pd.to_numeric(df['Idade'], errors='coerce').dropna()
-        
-        if len(idades_validas) > 0:
-            media_idade = idades_validas.mean()
-        else:
+    if 'Idade' in df.columns:
+        try:
+            # Converter para numérico, ignorando erros
+            idades_validas = pd.to_numeric(df['Idade'], errors='coerce').dropna()
+            
+            if len(idades_validas) > 0:
+                media_idade = idades_validas.mean()
+            else:
+                media_idade = None
+        except Exception as e:
+            st.warning(f"Erro ao calcular estatísticas de idade: {str(e)}")
             media_idade = None
     else:
         media_idade = None
