@@ -62,12 +62,23 @@ def adicionar_secao_amostra_dados(df, filtro_abono=None):
     # Mostrar amostra dos dados FILTRADOS
     st.subheader("Amostra dos Dados")
     with st.expander("Ver amostra dos dados"):
-        # Definir número de linhas a mostrar
-        num_linhas = min(10, len(df))
-        st.dataframe(df.head(num_linhas))
+        # Ordenar os dados alfabeticamente por Nome, se a coluna existir
+        if 'Nome' in df.columns:
+            df_ordenado = df.sort_values(by='Nome')
+        else:
+            # Se não houver coluna Nome, tentar ordenar pela primeira coluna de texto
+            colunas_texto = df.select_dtypes(include=['object']).columns
+            if len(colunas_texto) > 0:
+                df_ordenado = df.sort_values(by=colunas_texto[0])
+            else:
+                df_ordenado = df
         
-        # Opção para download dos dados filtrados completos
-        csv_dados = df.to_csv(index=False).encode('utf-8')
+        # Definir número de linhas a mostrar
+        num_linhas = min(10, len(df_ordenado))
+        st.dataframe(df_ordenado.head(num_linhas))
+        
+        # Opção para download dos dados filtrados completos (também ordenados)
+        csv_dados = df_ordenado.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download dos Dados Filtrados (CSV)",
             data=csv_dados,
