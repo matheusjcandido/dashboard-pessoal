@@ -59,20 +59,37 @@ def adicionar_secao_amostra_dados(df, filtro_abono=None):
     Adiciona uma seção para visualizar e baixar amostra dos dados filtrados
     O dataframe df já deve estar com todos os filtros aplicados
     """
+    # Limpar dados antes de exibir - remover possíveis linhas de totais ou vazias
+    df_limpo = df.copy()
+    
+    # Remover linhas totalmente vazias
+    df_limpo = df_limpo.dropna(how='all')
+    
+    # Identificar e remover linhas de totais (se existirem)
+    if 'Nome' in df_limpo.columns:
+        # Remover linhas onde o Nome contém "total", "totais", etc.
+        df_limpo = df_limpo[~df_limpo['Nome'].astype(str).str.lower().str.contains('total')]
+    
+    # Remover linhas onde o ID está vazio ou contém "total"
+    if 'ID' in df_limpo.columns:
+        # Converter para string primeiro para evitar erros com NaN
+        df_limpo = df_limpo[~df_limpo['ID'].astype(str).str.lower().str.contains('total')]
+        df_limpo = df_limpo[df_limpo['ID'].astype(str).str.strip() != '']
+    
+    # Ordenar os dados alfabeticamente por Nome, se a coluna existir
+    if 'Nome' in df_limpo.columns:
+        df_ordenado = df_limpo.sort_values(by='Nome')
+    else:
+        # Se não houver coluna Nome, tentar ordenar pela primeira coluna de texto
+        colunas_texto = df_limpo.select_dtypes(include=['object']).columns
+        if len(colunas_texto) > 0:
+            df_ordenado = df_limpo.sort_values(by=colunas_texto[0])
+        else:
+            df_ordenado = df_limpo
+    
     # Mostrar amostra dos dados FILTRADOS
     st.subheader("Amostra dos Dados")
     with st.expander("Ver amostra dos dados"):
-        # Ordenar os dados alfabeticamente por Nome, se a coluna existir
-        if 'Nome' in df.columns:
-            df_ordenado = df.sort_values(by='Nome')
-        else:
-            # Se não houver coluna Nome, tentar ordenar pela primeira coluna de texto
-            colunas_texto = df.select_dtypes(include=['object']).columns
-            if len(colunas_texto) > 0:
-                df_ordenado = df.sort_values(by=colunas_texto[0])
-            else:
-                df_ordenado = df
-        
         # Definir número de linhas a mostrar
         num_linhas = min(10, len(df_ordenado))
         st.dataframe(df_ordenado.head(num_linhas))
@@ -141,10 +158,26 @@ def processar_arquivo_csv(uploaded_file):
                 for j, coluna in enumerate(colunas):
                     if j < len(campos):
                         registro[coluna] = campos[j]
-                dados.append(registro)
+                
+                # Verificar se não é uma linha de totais
+                primeira_coluna = list(registro.values())[0] if registro else ""
+                if primeira_coluna.lower().startswith("total") or primeira_coluna == "":
+                    continue
+                
+                # Verificar se a linha tem conteúdo real (não só espaços)
+                valores_nao_vazios = [v for v in registro.values() if v.strip()]
+                if len(valores_nao_vazios) > 1:  # Pelo menos 2 campos não vazios
+                    dados.append(registro)
         
         # Converter para DataFrame
         df = pd.DataFrame(dados)
+        
+        # Remover linhas onde todas as colunas são vazias ou NaN
+        df = df.dropna(how='all')
+        
+        # Remover linhas onde o ID está vazio (geralmente linhas de totais ou dummies)
+        if 'ID' in df.columns:
+            df = df[df['ID'].notna() & (df['ID'] != '')]
         
         # Converter colunas numéricas
         if 'Idade' in df.columns:
