@@ -8,7 +8,7 @@ import re
 
 # Configuração da página
 st.set_page_config(
-    page_title="Distribuição de Idades - CBMPR",
+    page_title="Dashboard CBMPR - Efetivo",
     page_icon="🚒",
     layout="wide"
 )
@@ -186,12 +186,88 @@ def criar_grafico_faixas_etarias(df):
     plt.tight_layout()
     return fig
 
+# Função para criar o gráfico de distribuição por Cargo (Posto/Graduação)
+def criar_grafico_distribuicao_cargo(df):
+    if 'Cargo' not in df.columns:
+        st.error("Coluna de Cargo (Posto/Graduação) não encontrada no arquivo.")
+        return None
+    
+    # Limpar e padronizar valores da coluna Cargo
+    df_cargo = df.copy()
+    
+    # Contagem por cargo
+    contagem_cargo = df_cargo['Cargo'].value_counts()
+    
+    # Ordenar os cargos conforme hierarquia militar típica
+    # Lista com a ordem hierárquica aproximada no Corpo de Bombeiros
+    hierarquia = [
+        'Coronel', 'Tenente-Coronel', 'Major', 'Capitão',
+        '1º Tenente', '2º Tenente', 'Aspirante',
+        'Subtenente', '1º Sargento', '2º Sargento', '3º Sargento',
+        'Cabo', 'Soldado'
+    ]
+    
+    # Filtrar e reordenar os cargos encontrados conforme a hierarquia
+    ordem_personalizada = []
+    for rank in hierarquia:
+        for cargo in contagem_cargo.index:
+            if rank in cargo:
+                ordem_personalizada.append(cargo)
+    
+    # Adicionar quaisquer outros cargos que não se encaixam na hierarquia padrão
+    for cargo in contagem_cargo.index:
+        if cargo not in ordem_personalizada:
+            ordem_personalizada.append(cargo)
+    
+    # Filtrar para manter apenas os cargos que existem no DataFrame
+    ordem_final = [cargo for cargo in ordem_personalizada if cargo in contagem_cargo.index]
+    
+    # Reordenar a contagem
+    contagem_cargo = contagem_cargo.reindex(ordem_final)
+    
+    # Criar figura - garantindo espaço suficiente para os nomes dos cargos
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    # Criar gráfico de barras horizontais
+    cores = sns.color_palette("viridis", len(contagem_cargo))
+    bars = ax.barh(contagem_cargo.index, contagem_cargo.values, color=cores)
+    
+    # Adicionar rótulos nas barras
+    for bar in bars:
+        width = bar.get_width()
+        ax.text(width + 5, bar.get_y() + bar.get_height()/2, 
+                f'{width:,}', va='center')
+    
+    # Adicionar percentuais
+    total = contagem_cargo.sum()
+    for i, bar in enumerate(bars):
+        width = bar.get_width()
+        percentual = (width / total) * 100
+        if percentual >= 2:  # Mostrar percentual apenas para barras maiores
+            ax.text(width / 2, bar.get_y() + bar.get_height()/2, 
+                    f'{percentual:.1f}%', va='center', ha='center', 
+                    color='white', fontweight='bold')
+    
+    # Adicionar títulos e ajustes visuais
+    ax.set_title('Distribuição por Posto/Graduação - Corpo de Bombeiros Militar do Paraná', fontsize=16)
+    ax.set_xlabel('Quantidade de Militares', fontsize=12)
+    ax.set_ylabel('Posto/Graduação', fontsize=12)
+    
+    # Adicionar grade apenas no eixo x
+    ax.grid(axis='x', alpha=0.3)
+    ax.set_axisbelow(True)
+    
+    # Inverter o eixo y para que a hierarquia superior fique no topo
+    ax.invert_yaxis()
+    
+    plt.tight_layout()
+    return fig
+
 # Interface principal do Streamlit
-st.title("🚒 Dashboard - Distribuição de Idades")
-st.subheader("Corpo de Bombeiros Militar do Paraná")
+st.title("🚒 Dashboard - Corpo de Bombeiros Militar do Paraná")
 
 st.markdown("""
-Este dashboard visualiza a distribuição de idades do efetivo do Corpo de Bombeiros Militar do Paraná.
+Este dashboard apresenta visualizações sobre os dados de pessoal do Corpo de Bombeiros Militar do Paraná.
 Faça o upload do arquivo CSV gerado pela SEAP para visualizar os gráficos.
 
 **Formatos Suportados:**
@@ -209,7 +285,7 @@ if usar_dados_teste:
     # Criar dados de exemplo com distribuição similar à encontrada na análise
     np.random.seed(42)  # Para reprodutibilidade
     
-    # Distribuição aproximada conforme análise
+    # Distribuição aproximada de idade
     faixas = {
         "18-25": 138,
         "26-30": 264,
@@ -219,6 +295,22 @@ if usar_dados_teste:
         "46-50": 363,
         "51-55": 231,
         "56+": 9
+    }
+    
+    # Distribuição aproximada de cargos
+    cargos = {
+        "Coronel": 5,
+        "Tenente-Coronel": 20,
+        "Major": 35,
+        "Capitão": 90,
+        "1º Tenente": 140,
+        "2º Tenente": 180,
+        "Subtenente": 200,
+        "1º Sargento": 300,
+        "2º Sargento": 450,
+        "3º Sargento": 600,
+        "Cabo": 700,
+        "Soldado": 500
     }
     
     # Gerar idades com base na distribuição
@@ -241,14 +333,45 @@ if usar_dados_teste:
         elif faixa == "56+":
             idades.extend(np.random.randint(56, 61, quantidade))
     
+    # Gerar lista de cargos
+    lista_cargos = []
+    for cargo, quantidade in cargos.items():
+        lista_cargos.extend([cargo] * quantidade)
+    
+    # Ajustar tamanhos se necessário
+    min_len = min(len(idades), len(lista_cargos))
+    idades = idades[:min_len]
+    lista_cargos = lista_cargos[:min_len]
+    
     # Criar dataframe de exemplo
     df = pd.DataFrame({
-        'ID': range(1, len(idades) + 1),
-        'Nome': [f'Bombeiro Exemplo {i}' for i in range(1, len(idades) + 1)],
-        'Idade': idades
+        'ID': range(1, min_len + 1),
+        'Nome': [f'Bombeiro Exemplo {i}' for i in range(1, min_len + 1)],
+        'Idade': idades,
+        'Cargo': lista_cargos
     })
     
-    st.success(f"Dados de exemplo carregados com sucesso! ({len(df)} registros)")
+    # Exibir contagem total em um card grande
+    st.success(f"Dados de exemplo carregados com sucesso!")
+    
+    # Card destacado com o efetivo total
+    st.markdown(
+        f"""
+        <div style="
+            background-color: #FF4500;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        ">
+            <h2 style="color: white; margin: 0;">Efetivo Total</h2>
+            <h1 style="color: white; font-size: 48px; margin: 10px 0;">{len(df)}</h1>
+            <p style="color: white; margin: 0;">militares</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     
     # Mostrar amostra dos dados
     with st.expander("Ver amostra dos dados"):
@@ -263,6 +386,25 @@ else:
             df = processar_arquivo_csv(uploaded_file)
             
             if df is not None:
+                # Card destacado com o efetivo total
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color: #FF4500;
+                        padding: 20px;
+                        border-radius: 10px;
+                        text-align: center;
+                        margin: 20px 0;
+                        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                    ">
+                        <h2 style="color: white; margin: 0;">Efetivo Total</h2>
+                        <h1 style="color: white; font-size: 48px; margin: 10px 0;">{len(df)}</h1>
+                        <p style="color: white; margin: 0;">militares</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                
                 # Mostrar amostra dos dados
                 with st.expander("Ver amostra dos dados"):
                     st.dataframe(df.head(10))
@@ -282,11 +424,13 @@ st.header("2. Visualizações")
 # Opções de visualização
 tipo_grafico = st.radio(
     "Escolha o tipo de visualização:",
-    ["Distribuição Contínua (Histograma)", "Distribuição por Faixas Etárias (Barras)"]
+    ["Distribuição por Idade (Histograma)", 
+     "Distribuição por Faixas Etárias", 
+     "Distribuição por Posto/Graduação"]
 )
 
-if tipo_grafico == "Distribuição Contínua (Histograma)":
-    st.subheader("Distribuição Contínua de Idades")
+if tipo_grafico == "Distribuição por Idade (Histograma)":
+    st.subheader("Distribuição de Idades")
     fig = criar_grafico_distribuicao_idade(df)
     
     if fig:
@@ -320,7 +464,7 @@ if tipo_grafico == "Distribuição Contínua (Histograma)":
         with col4:
             st.metric("Idade Máxima", f"{df_idade['Idade'].max():.0f} anos")
 
-else:
+elif tipo_grafico == "Distribuição por Faixas Etárias":
     st.subheader("Distribuição por Faixas Etárias")
     fig = criar_grafico_faixas_etarias(df)
     
@@ -363,6 +507,40 @@ else:
         })
         
         st.dataframe(tabela_faixas, use_container_width=True)
+
+else:  # Distribuição por Posto/Graduação
+    st.subheader("Distribuição por Posto/Graduação")
+    fig = criar_grafico_distribuicao_cargo(df)
+    
+    if fig:
+        st.pyplot(fig)
+        
+        # Opção para download do gráfico
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+        buf.seek(0)
+        
+        st.download_button(
+            label="📥 Download do Gráfico (PNG)",
+            data=buf,
+            file_name="distribuicao_posto_graduacao_cbmpr.png",
+            mime="image/png"
+        )
+        
+        # Exibir tabela de cargos
+        st.subheader("Tabela de Distribuição por Posto/Graduação")
+        
+        # Contagem por cargo
+        contagem = df['Cargo'].value_counts()
+        percentual = (contagem / contagem.sum() * 100).round(2)
+        
+        tabela_cargos = pd.DataFrame({
+            'Posto/Graduação': contagem.index,
+            'Quantidade': contagem.values,
+            'Percentual (%)': percentual.values
+        })
+        
+        st.dataframe(tabela_cargos, use_container_width=True)
 
 # Rodapé
 st.markdown("---")
