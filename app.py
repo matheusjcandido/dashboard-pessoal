@@ -1,604 +1,337 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime
-import base64
+import matplotlib.pyplot as plt
+import seaborn as sns
 import io
+import numpy as np
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard CBMPR",
-    page_icon="🔥",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Distribuição de Idades - CBMPR",
+    page_icon="🚒",
+    layout="wide"
 )
 
-# Cores do CBMPR
-VERMELHO = "#B22222"  # Vermelho bombeiro
-DOURADO = "#FFD700"   # Dourado/Amarelo para destaques
-PRETO = "#000000"     # Preto para texto
-CINZA_CLARO = "#F0F2F6"  # Cor de fundo clara
-
-# Função para aplicar CSS customizado
-def aplicar_css():
-    st.markdown("""
-    <style>
-    .main {
-        background-color: #F0F2F6;
-    }
-    .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-    .titulo-dashboard {
-        color: #B22222;
-        text-align: center;
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin-bottom: 1rem;
-    }
-    .card {
-        background-color: white;
-        border-radius: 5px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-    .card-titulo {
-        color: #B22222;
-        font-size: 1.2rem;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    .metrica {
-        font-size: 2.5rem;
-        font-weight: bold;
-        text-align: center;
-        color: #B22222;
-    }
-    .metrica-label {
-        font-size: 1rem;
-        text-align: center;
-        color: #000000;
-    }
-    .footer {
-        text-align: center;
-        margin-top: 30px;
-        color: #777777;
-        font-size: 0.8rem;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Função para carregar os dados
-@st.cache_data
-def carregar_dados(arquivo):
-    try:
-        # Primeiro, vamos tentar ler o arquivo como texto para identificar possíveis problemas
-        conteudo_arquivo = arquivo.read()
-        arquivo.seek(0)  # Resetar o ponteiro do arquivo
-        
-        # Tentativa de determinar o delimiter
-        # Vamos ler as primeiras linhas e verificar se há mais vírgulas ou ponto-e-vírgulas
-        import io
-        amostra = conteudo_arquivo[:2000].decode('cp1252', errors='replace')
-        virgulas = amostra.count(',')
-        pontovirgulas = amostra.count(';')
-        tabs = amostra.count('\t')
-        
-        # Determinar qual delimitador usar
-        if pontovirgulas > virgulas and pontovirgulas > tabs:
-            delimitador = ';'
-        elif tabs > virgulas and tabs > pontovirgulas:
-            delimitador = '\t'
-        else:
-            delimitador = ','
-            
-        st.sidebar.info(f"Delimitador detectado: {delimitador}")
-        
-        # Tentativa com engine python para maior flexibilidade
-        df = pd.read_csv(
-            io.StringIO(conteudo_arquivo.decode('cp1252', errors='replace')),
-            delimiter=delimitador,
-            engine='python',  # Engine mais tolerante a erros
-            on_bad_lines='skip',  # Pular linhas com problemas
-            quoting=3,  # QUOTE_NONE - não considerar aspas como delimitadores especiais
-            dtype=str,  # Tratar TODAS as colunas como string inicialmente
-            skiprows=range(7)  # Pular as linhas de metadados
-        )
-        
-        # Remover linhas vazias
-        df = df.dropna(how='all')
-        
-        # Identificar colunas relevantes
-        # Para encontrar a coluna de cabeçalho, buscar padrões específicos
-        cabecalho_detectado = False
-        for i, row in df.iterrows():
-            # Verificar se esta linha parece um cabeçalho (contém palavras-chave esperadas)
-            if any(col for col in row if isinstance(col, str) and ('ID' in col or 'Nome' in col)):
-                # Usar esta linha como cabeçalho
-                cabecalho = row.values
-                df = df.iloc[i+1:].reset_index(drop=True)  # Pegar dados a partir da próxima linha
-                # Atribuir novos nomes às colunas
-                df.columns = cabecalho
-                cabecalho_detectado = True
-                break
-        
-        if not cabecalho_detectado:
-            st.warning("Cabeçalho não detectado automaticamente. Usando a primeira linha de dados.")
-        
-        # Limpar nomes das colunas
-        df.columns = [col.strip() if isinstance(col, str) else f"Col_{i}" for i, col in enumerate(df.columns)]
-        
-        # Remover colunas que não interessam (usando verificação por substring para maior flexibilidade)
-        colunas_excluir = []
-        for col in df.columns:
-            if any(termo in col.lower() if isinstance(col, str) else False for termo in 
-                  ['rgao', 'func', 'espec', 'empregado', 'provimento', 'categoria', 'trabalhista', 
-                   'previdenci', 'segrega', 'rgps', 'cidade', 'unnamed']):
-                colunas_excluir.append(col)
-        
-        # Excluir colunas identificadas e colunas vazias
-        df = df.drop(columns=[col for col in colunas_excluir if col in df.columns])
-        
-        # Remover colunas sem cabeçalho ou com cabeçalho em branco
-        colunas_sem_nome = [col for col in df.columns if not isinstance(col, str) or col.strip() == '']
-        if colunas_sem_nome:
-            df = df.drop(columns=colunas_sem_nome)
-        
-        # Identificar e renomear colunas importantes
-        nome_col_idade = None
-        nome_col_cargo = None
-        nome_col_unidade = None
-        nome_col_abono = None
-        
-        for col in df.columns:
-            if isinstance(col, str):
-                col_lower = col.lower()
-                if 'idade' in col_lower:
-                    nome_col_idade = col
-                elif 'cargo' in col_lower or 'posto' in col_lower or 'gradua' in col_lower:
-                    nome_col_cargo = col
-                elif 'unidade' in col_lower and 'trabalho' in col_lower:
-                    nome_col_unidade = col
-                elif 'abono' in col_lower or 'perman' in col_lower:
-                    nome_col_abono = col
-        
-        # Garantir que as colunas necessárias existam
-        if nome_col_idade:
-            # Converter idade para numérico preservando só os dígitos
-            df['Idade'] = df[nome_col_idade].str.extract('(\d+)', expand=False)
-            df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
-            if nome_col_idade != 'Idade':
-                df = df.drop(columns=[nome_col_idade])
-        else:
-            df['Idade'] = np.nan
-            st.warning("Coluna de idade não encontrada no arquivo")
-        
-        if nome_col_cargo:
-            df = df.rename(columns={nome_col_cargo: 'Cargo'})
-        else:
-            df['Cargo'] = "Não informado"
-            st.warning("Coluna de cargo não encontrada no arquivo")
-        
-        if nome_col_unidade:
-            df = df.rename(columns={nome_col_unidade: 'Descrição da Unidade de Trabalho'})
-        else:
-            df['Descrição da Unidade de Trabalho'] = "Não informado"
-            st.warning("Coluna de unidade de trabalho não encontrada no arquivo")
-        
-        if nome_col_abono:
-            df = df.rename(columns={nome_col_abono: 'Recebe Abono Permanência'})
-        else:
-            df['Recebe Abono Permanência'] = "N"
-            st.warning("Coluna de abono permanência não encontrada no arquivo")
-        
-        # Não converter datas - deixar como string conforme solicitado
-        # Tratar colunas de data (Data Nascimento) como string sem conversão
-        
-        # Ordenar hierarquia militar corretamente
-        hierarquia = {
-            "Coronel": 1, 
-            "Tenente Coronel": 2, 
-            "Major": 3, 
-            "Capitão": 4, 
-            "1º Tenente": 5, 
-            "2º Tenente": 6,
-            "2º Tenente 6": 6.5,  # Para tratar o cargo adicional
-            "Aspirante a Oficial": 7,
-            "Subtenente": 8,
-            "1º Sargento": 9,
-            "2º Sargento": 10, 
-            "3º Sargento": 11, 
-            "Cabo": 12, 
-            "Soldado 1ª Classe": 13,
-            "Soldado 2ª Classe": 14,
-            "Aluno de 3º Ano": 15,
-            "Aluno de 2º Ano": 16,
-            "Aluno de 1º Ano": 17
-        }
-        
-        # Adicionar coluna de ordem hierárquica
-        df['Ordem_Hierarquica'] = df['Cargo'].map(lambda x: hierarquia.get(x, 999) if pd.notnull(x) else 999)
-        
-        # Exibir informações sobre a importação
-        st.sidebar.success(f"Dados carregados com sucesso: {len(df)} registros")
-        
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {str(e)}")
-        st.error("Detalhes do erro: Verifique se o arquivo está no formato correto.")
-        return pd.DataFrame()
-
-# Função para gerar estatísticas
-def gerar_estatisticas(df):
-    total_efetivo = len(df)
+# Função para processar o arquivo CSV
+def processar_arquivo_csv(uploaded_file):
+    # Leitura inicial do arquivo
+    conteudo = uploaded_file.read().decode('cp1252')
+    linhas = conteudo.split('\r\n')
     
-    # Verificar se a coluna de idade existe e tem dados válidos
+    # Identificar linha de cabeçalho (começa com 'ID,Nome,')
+    indice_header = -1
+    for i, linha in enumerate(linhas):
+        if linha.startswith('ID,Nome,'):
+            indice_header = i
+            break
+    
+    if indice_header == -1:
+        st.error("Formato de arquivo inválido. Não foi possível encontrar o cabeçalho.")
+        return None
+    
+    # Extrair nomes das colunas
+    colunas = linhas[indice_header].split(',')
+    
+    # Criar lista de dicionários com os dados
+    dados = []
+    for i in range(indice_header + 2, len(linhas)):
+        linha = linhas[i].strip()
+        if not linha:  # Pular linhas vazias
+            continue
+        
+        campos = linha.split(',')
+        if len(campos) >= len(colunas):
+            # Criar dicionário com os dados da linha
+            registro = {}
+            for j, coluna in enumerate(colunas):
+                if j < len(campos):
+                    registro[coluna] = campos[j]
+            dados.append(registro)
+    
+    # Converter para DataFrame
+    df = pd.DataFrame(dados)
+    
+    # Converter colunas numéricas
     if 'Idade' in df.columns:
-        try:
-            # Converter para numérico, ignorando erros
-            idades_validas = pd.to_numeric(df['Idade'], errors='coerce').dropna()
-            
-            if len(idades_validas) > 0:
-                media_idade = idades_validas.mean()
-            else:
-                media_idade = None
-        except Exception as e:
-            st.warning(f"Erro ao calcular estatísticas de idade: {str(e)}")
-            media_idade = None
-    else:
-        media_idade = None
+        df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
     
-    return {
-        'total_efetivo': total_efetivo,
-        'media_idade': media_idade
-    }
+    return df
 
-# Função para criar gráfico de distribuição por idade
-def grafico_distribuicao_idade(df):
-    # Verificar se há dados de idade disponíveis
+# Função para criar o gráfico de distribuição de idade
+def criar_grafico_distribuicao_idade(df):
+    if 'Idade' not in df.columns:
+        st.error("Coluna de idade não encontrada no arquivo.")
+        return None
+    
+    # Remover valores nulos
     df_idade = df.dropna(subset=['Idade'])
     
-    if len(df_idade) == 0:
-        # Criar um gráfico vazio com mensagem se não houver dados
-        fig = go.Figure()
-        fig.add_annotation(
-            text="Dados de idade não disponíveis",
-            x=0.5, y=0.5,
-            xref="paper", yref="paper",
-            showarrow=False,
-            font=dict(color=VERMELHO, size=16)
-        )
-        fig.update_layout(title_text="Distribuição por Faixa Etária")
-        return fig
+    # Criar figura
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Criar faixas etárias
-    bins = [18, 25, 30, 35, 40, 45, 50, 55, 100]
+    # Histograma com KDE
+    sns.histplot(df_idade['Idade'], bins=40, kde=True, ax=ax, color='#1e3d59')
+    
+    # Adicionar grade, títulos e ajustes visuais
+    ax.grid(alpha=0.3)
+    ax.set_title('Distribuição de Idade - Corpo de Bombeiros Militar do Paraná', fontsize=16)
+    ax.set_xlabel('Idade (anos)', fontsize=12)
+    ax.set_ylabel('Frequência', fontsize=12)
+    
+    # Adicionar estatísticas
+    media = df_idade['Idade'].mean()
+    mediana = df_idade['Idade'].median()
+    min_idade = df_idade['Idade'].min()
+    max_idade = df_idade['Idade'].max()
+    
+    # Adicionar linhas de média e mediana
+    ax.axvline(media, color='red', linestyle='--', alpha=0.7, label=f'Média: {media:.1f} anos')
+    ax.axvline(mediana, color='green', linestyle='-.', alpha=0.7, label=f'Mediana: {mediana:.1f} anos')
+    ax.legend()
+    
+    # Adicionar texto com estatísticas
+    stats_text = f"Estatísticas:\n" \
+                 f"• Média: {media:.1f} anos\n" \
+                 f"• Mediana: {mediana:.1f} anos\n" \
+                 f"• Mínima: {min_idade:.0f} anos\n" \
+                 f"• Máxima: {max_idade:.0f} anos\n" \
+                 f"• Total: {len(df_idade)} militares"
+    
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+            verticalalignment='top', horizontalalignment='left',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
+    
+    plt.tight_layout()
+    return fig
+
+# Função para criar o gráfico de faixas etárias
+def criar_grafico_faixas_etarias(df):
+    if 'Idade' not in df.columns:
+        return None
+    
+    # Remover valores nulos
+    df_idade = df.dropna(subset=['Idade'])
+    
+    # Definir faixas etárias
+    bins = [18, 25, 30, 35, 40, 45, 50, 55, 60]
     labels = ['18-25', '26-30', '31-35', '36-40', '41-45', '46-50', '51-55', '56+']
     
-    # Garantir que a idade é numérica
-    df_idade['Idade'] = pd.to_numeric(df_idade['Idade'], errors='coerce')
-    df_idade = df_idade.dropna(subset=['Idade'])
+    # Categorizar idades
+    df_idade['Faixa Etária'] = pd.cut(df_idade['Idade'], bins=bins, labels=labels, right=True)
     
-    try:
-        df_idade['Faixa_Etaria'] = pd.cut(df_idade['Idade'], bins=bins, labels=labels, right=False)
-        
-        # Contar por faixa etária
-        contagem_idade = df_idade['Faixa_Etaria'].value_counts().sort_index()
-        
-        # Criar gráfico
-        fig = px.bar(
-            x=contagem_idade.index, 
-            y=contagem_idade.values,
-            labels={'x': 'Faixa Etária', 'y': 'Quantidade'},
-            title='Distribuição por Faixa Etária'
-        )
-        
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font={'color': PRETO},
-            title={'font': {'color': VERMELHO}},
-            xaxis={'title': {'font': {'color': PRETO}}},
-            yaxis={'title': {'font': {'color': PRETO}}},
-            hovermode='closest'
-        )
-        
-        fig.update_traces(marker_color=VERMELHO, hovertemplate='Faixa: %{x}<br>Quantidade: %{y}')
-        
-    except Exception as e:
-        # Em caso de erro, criar um gráfico vazio com mensagem
-        fig = go.Figure()
-        fig.add_annotation(
-            text=f"Erro ao processar dados de idade: {str(e)}",
-            x=0.5, y=0.5,
-            xref="paper", yref="paper",
-            showarrow=False,
-            font=dict(color=VERMELHO, size=14)
-        )
-        fig.update_layout(title_text="Distribuição por Faixa Etária")
+    # Contagem por faixa etária
+    contagem = df_idade['Faixa Etária'].value_counts().sort_index()
     
+    # Criar figura
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Cores para o gráfico de barras
+    cores = sns.color_palette("Blues_r", len(labels))
+    
+    # Criar gráfico de barras
+    bars = ax.bar(contagem.index, contagem.values, color=cores)
+    
+    # Adicionar rótulos em cima das barras
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + 5,
+                f'{height:,}', ha='center', va='bottom')
+    
+    # Adicionar percentuais
+    total = contagem.sum()
+    percentuais = contagem / total * 100
+    
+    for i, (bar, pct) in enumerate(zip(bars, percentuais)):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height / 2,
+                f'{pct:.1f}%', ha='center', va='center', color='white', fontweight='bold')
+    
+    # Adicionar títulos e ajustes visuais
+    ax.set_title('Distribuição por Faixas Etárias - Corpo de Bombeiros Militar do Paraná', fontsize=16)
+    ax.set_xlabel('Faixa Etária (anos)', fontsize=12)
+    ax.set_ylabel('Quantidade de Militares', fontsize=12)
+    ax.grid(axis='y', alpha=0.3)
+    
+    plt.tight_layout()
     return fig
 
-# Função para criar gráfico de distribuição por cargo
-def grafico_distribuicao_cargo(df):
-    # Verificar se há dados de cargo disponíveis
-    if 'Cargo' not in df.columns or df['Cargo'].isna().all():
-        # Criar um gráfico vazio com mensagem
-        fig = go.Figure()
-        fig.add_annotation(
-            text="Dados de posto/graduação não disponíveis",
-            x=0.5, y=0.5,
-            xref="paper", yref="paper",
-            showarrow=False,
-            font=dict(color=VERMELHO, size=16)
-        )
-        fig.update_layout(title_text="Distribuição por Posto/Graduação")
-        return fig
-    
-    try:
-        # Contar por cargo e ordenar pela hierarquia
-        contagem_cargo = df.groupby(['Cargo', 'Ordem_Hierarquica']).size().reset_index(name='Quantidade')
-        contagem_cargo = contagem_cargo.sort_values('Ordem_Hierarquica')
-        
-        # Se não houver dados após o agrupamento
-        if len(contagem_cargo) == 0:
-            fig = go.Figure()
-            fig.add_annotation(
-                text="Sem dados suficientes para exibição",
-                x=0.5, y=0.5,
-                xref="paper", yref="paper",
-                showarrow=False,
-                font=dict(color=VERMELHO, size=16)
-            )
-            fig.update_layout(title_text="Distribuição por Posto/Graduação")
-            return fig
-        
-        # Criar gráfico
-        fig = px.bar(
-            contagem_cargo,
-            x='Cargo',
-            y='Quantidade',
-            labels={'Cargo': 'Posto/Graduação', 'Quantidade': 'Quantidade'},
-            title='Distribuição por Posto/Graduação'
-        )
-        
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font={'color': PRETO},
-            title={'font': {'color': VERMELHO}},
-            xaxis={'title': {'font': {'color': PRETO}}},
-            yaxis={'title': {'font': {'color': PRETO}}},
-            hovermode='closest'
-        )
-        
-        fig.update_traces(marker_color=VERMELHO, hovertemplate='Cargo: %{x}<br>Quantidade: %{y}')
-        
-        # Ajustar layout para acomodar nomes longos
-        fig.update_layout(xaxis_tickangle=-45)
-        
-    except Exception as e:
-        # Em caso de erro, criar um gráfico vazio com mensagem
-        fig = go.Figure()
-        fig.add_annotation(
-            text=f"Erro ao processar dados de posto/graduação: {str(e)}",
-            x=0.5, y=0.5,
-            xref="paper", yref="paper",
-            showarrow=False,
-            font=dict(color=VERMELHO, size=14)
-        )
-        fig.update_layout(title_text="Distribuição por Posto/Graduação")
-    
-    return fig
+# Interface principal do Streamlit
+st.title("🚒 Dashboard - Distribuição de Idades")
+st.subheader("Corpo de Bombeiros Militar do Paraná")
 
-# Função para download de dados em CSV
-def criar_link_download(df, nome_arquivo):
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{nome_arquivo}.csv" class="btn-download">Baixar CSV</a>'
-    return href
+st.markdown("""
+Este dashboard visualiza a distribuição de idades do efetivo do Corpo de Bombeiros Militar do Paraná.
+Faça o upload do arquivo CSV gerado pela SEAP para visualizar os gráficos.
+""")
 
-# Layout principal do dashboard
-def main():
-    # Aplicar CSS
-    aplicar_css()
+# Seção de upload de arquivo
+st.header("1. Carregar Arquivo")
+
+# Opção para usar dados simulados para teste
+usar_dados_teste = st.checkbox("Usar dados de exemplo para teste", value=False)
+
+if usar_dados_teste:
+    # Criar dados de exemplo com distribuição similar à encontrada na análise
+    np.random.seed(42)  # Para reprodutibilidade
     
-    # Cabeçalho
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col2:
-        st.markdown('<div class="titulo-dashboard">Dashboard do Efetivo - CBMPR</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align: center; margin-bottom: 30px;">Corpo de Bombeiros Militar do Paraná</div>', unsafe_allow_html=True)
+    # Distribuição aproximada conforme análise
+    faixas = {
+        "18-25": 138,
+        "26-30": 264,
+        "31-35": 762,
+        "36-40": 876,
+        "41-45": 568,
+        "46-50": 363,
+        "51-55": 231,
+        "56+": 9
+    }
     
-    # Carregar dados
-    st.sidebar.header("Opções")
-    uploaded_file = st.sidebar.file_uploader("Carregar arquivo CSV", type=["csv"])
+    # Gerar idades com base na distribuição
+    idades = []
+    for faixa, quantidade in faixas.items():
+        if faixa == "18-25":
+            idades.extend(np.random.randint(18, 26, quantidade))
+        elif faixa == "26-30":
+            idades.extend(np.random.randint(26, 31, quantidade))
+        elif faixa == "31-35":
+            idades.extend(np.random.randint(31, 36, quantidade))
+        elif faixa == "36-40":
+            idades.extend(np.random.randint(36, 41, quantidade))
+        elif faixa == "41-45":
+            idades.extend(np.random.randint(41, 46, quantidade))
+        elif faixa == "46-50":
+            idades.extend(np.random.randint(46, 51, quantidade))
+        elif faixa == "51-55":
+            idades.extend(np.random.randint(51, 56, quantidade))
+        elif faixa == "56+":
+            idades.extend(np.random.randint(56, 61, quantidade))
+    
+    # Criar dataframe de exemplo
+    df = pd.DataFrame({
+        'ID': range(1, len(idades) + 1),
+        'Nome': [f'Bombeiro Exemplo {i}' for i in range(1, len(idades) + 1)],
+        'Idade': idades
+    })
+    
+    st.success(f"Dados de exemplo carregados com sucesso! ({len(df)} registros)")
+    
+    # Mostrar amostra dos dados
+    with st.expander("Ver amostra dos dados"):
+        st.dataframe(df.head(10))
+    
+else:
+    # Upload de arquivo CSV
+    uploaded_file = st.file_uploader("Escolha o arquivo CSV", type="csv")
     
     if uploaded_file is not None:
-        df = carregar_dados(uploaded_file)
+        try:
+            df = processar_arquivo_csv(uploaded_file)
+            
+            if df is not None:
+                st.success(f"Arquivo carregado com sucesso! ({len(df)} registros)")
+                
+                # Mostrar amostra dos dados
+                with st.expander("Ver amostra dos dados"):
+                    st.dataframe(df.head(10))
+            else:
+                st.stop()
         
-        if not df.empty:
-            # Sidebar - Filtros
-            st.sidebar.subheader("Filtros")
-            
-            # Filtro de cargo
-            todos_cargos = ["Todos"] + sorted(df['Cargo'].unique().tolist())
-            cargo_selecionado = st.sidebar.selectbox("Posto/Graduação", todos_cargos)
-            
-            # Filtro de unidade de trabalho
-            todas_unidades = ["Todas"] + sorted(df['Descrição da Unidade de Trabalho'].unique().tolist())
-            unidade_selecionada = st.sidebar.selectbox("Unidade de Trabalho", todas_unidades)
-            
-            # Filtro de abono permanência
-            opcoes_abono = ["Todos", "Sim", "Não"]
-            abono_selecionado = st.sidebar.selectbox("Recebe Abono Permanência", opcoes_abono)
-            
-            # Aplicar filtros
-            df_filtrado = df.copy()
-            
-            if cargo_selecionado != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['Cargo'] == cargo_selecionado]
-                
-            if unidade_selecionada != "Todas":
-                df_filtrado = df_filtrado[df_filtrado['Descrição da Unidade de Trabalho'] == unidade_selecionada]
-                
-            if abono_selecionado != "Todos":
-                abono_valor = "S" if abono_selecionado == "Sim" else "N"
-                df_filtrado = df_filtrado[df_filtrado['Recebe Abono Permanência'] == abono_valor]
-            
-            # Gerar estatísticas
-            estatisticas = gerar_estatisticas(df_filtrado)
-            
-            # Primeira linha - Cards com métricas
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.markdown('<div class="card-titulo">Total de Efetivo</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metrica">{estatisticas["total_efetivo"]}</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-            with col2:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.markdown('<div class="card-titulo">Média de Idade</div>', unsafe_allow_html=True)
-                if estatisticas["media_idade"] is not None:
-                    st.markdown(f'<div class="metrica">{estatisticas["media_idade"]:.1f}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="metrica">N/D</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="metrica-label">Dados de idade não disponíveis</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Segunda linha - Gráficos
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.plotly_chart(grafico_distribuicao_idade(df_filtrado), use_container_width=True)
-                
-            with col2:
-                st.plotly_chart(grafico_distribuicao_cargo(df_filtrado), use_container_width=True)
-            
-            # Tabela de dados
-            st.subheader("Tabela de Dados")
-            
-            # Colunas para exibir
-            colunas_exibir = ['Nome', 'Cargo', 'Idade', 'Descrição da Unidade de Trabalho', 'Recebe Abono Permanência']
-            
-            # Ordenar por nome
-            df_exibir = df_filtrado[colunas_exibir].sort_values('Nome')
-            
-            # Exibir tabela
-            st.dataframe(df_exibir, height=300)
-            
-            # Botão de download
-            st.markdown(criar_link_download(df_exibir, "dados_cbmpr"), unsafe_allow_html=True)
-            
-            # Rodapé com informações
-            st.markdown('<div class="footer">Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná. Dados atualizados em: ' + 
-                      datetime.now().strftime("%d/%m/%Y") + '</div>', unsafe_allow_html=True)
-        else:
-            st.error("Não foi possível processar o arquivo. Verifique se o formato está correto.")
+        except Exception as e:
+            st.error(f"Erro ao processar o arquivo: {str(e)}")
+            st.stop()
     else:
-        # Mensagem inicial
-        st.info("👆 Faça o upload do arquivo CSV para visualizar o dashboard.")
-        
-        # Instruções detalhadas
-        st.markdown("""
-        ## Dashboard de Efetivo do CBMPR
-        
-        Este dashboard foi desenvolvido para visualização dos dados de pessoal do Corpo de Bombeiros Militar do Paraná.
-        
-        ### Instruções de Uso:
-        
-        1. **Upload do Arquivo:**
-           - Clique no botão "Browse files" no menu lateral
-           - Selecione o arquivo CSV contendo os dados do efetivo
-           - O arquivo deve ter os cabeçalhos e dados conforme o padrão do CBMPR
-        
-        2. **Interagindo com o Dashboard:**
-           - Utilize os filtros no menu lateral para refinar a visualização
-           - Passe o mouse sobre os gráficos para ver detalhes
-           - Ordene e filtre a tabela conforme necessário
-           - Faça download dos dados filtrados em formato CSV
-        
-        ### Funcionalidades:
-        - Visualização do total de efetivo
-        - Média de idade do efetivo
-        - Gráfico de distribuição por faixa etária
-        - Gráfico de distribuição por posto/graduação
-        - Filtros por cargo, unidade de trabalho e abono permanência
-        - Tabela interativa com opção de download
-        
-        ### Solução de Problemas Comuns:
-        
-        #### Erro "Expected 1 fields in line X, saw Y"
-        Este erro ocorre quando o delimitador no arquivo CSV não é consistente. Você pode:
-        - Verificar o delimitador usado (vírgula, ponto-e-vírgula, tab)
-        - Abrir o arquivo em um editor de texto e verificar a linha problemática
-        - Salvar o arquivo garantindo o mesmo delimitador em todas as linhas
-        
-        #### Problema com codificação de caracteres
-        Se os acentos e caracteres especiais aparecerem incorretamente:
-        - Salve o arquivo com codificação Windows-1252 (CP1252)
-        - Tente converter o arquivo para UTF-8 usando um editor de texto
-        
-        #### Problema com formato de dados
-        O sistema trata automaticamente datas como texto. Não é necessário fazer conversões.
-        """)
-        
-        # Adicionar exemplo de formato esperado
-        with st.expander("Ver Exemplo de Formato Esperado"):
-            st.markdown("""
-            O arquivo CSV deve ter um formato similar a este:
-            
-            ```
-            ID,Nome,RG,CPF,Data Nascimento,Idade,Descrição da Unidade de Trabalho,Cargo,Recebe Abono Permanência
-            12345,JOÃO DA SILVA,1234567,123.456.789-00,01/01/1980,45,1GB 1SGB 1SEC BM,Coronel,S
-            67890,MARIA SANTOS,7654321,987.654.321-00,15/05/1990,35,3GB 1SGB 1SEC BM,Capitão,N
-            ```
-            
-            **Dicas para preparar o arquivo:**
-            
-            1. Verifique se todas as linhas têm o mesmo número de campos
-            2. Certifique-se de que o delimitador seja consistente (vírgula, ponto-e-vírgula ou tab)
-            3. Se abrir no Excel:
-               - Salve como CSV (Separado por vírgulas)
-               - Ou use "Salvar como" e selecione CSV (MS-DOS)
-            """)
-        
-        # Informações para usuários técnicos
-        with st.expander("Informações Técnicas para Resolução de Problemas"):
-            st.markdown("""
-            ### Resolução de Problemas Técnicos
-            
-            #### Para problemas de delimitação:
-            ```python
-            # Se o arquivo usa ponto-e-vírgula como delimitador:
-            df = pd.read_csv('seu_arquivo.csv', delimiter=';', encoding='cp1252')
-            
-            # Se o arquivo usa tab como delimitador:
-            df = pd.read_csv('seu_arquivo.csv', delimiter='\\t', encoding='cp1252')
-            ```
-            
-            #### Para problemas com linhas de metadados:
-            ```python
-            # Pular as primeiras X linhas:
-            df = pd.read_csv('seu_arquivo.csv', skiprows=X, encoding='cp1252')
-            ```
-            
-            #### Para problemas com linhas mal formadas:
-            ```python
-            # Ignorar linhas com problemas:
-            df = pd.read_csv('seu_arquivo.csv', on_bad_lines='skip', encoding='cp1252')
-            ```
-            
-            O dashboard tenta automaticamente detectar o delimitador correto e ignorar linhas problemáticas.
-            """)
-        
-        # Footer com informações
-        st.markdown('<div class="footer">Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná.<br/>Desenvolvido em Python com Streamlit.</div>', unsafe_allow_html=True)
+        st.info("Por favor, faça upload de um arquivo CSV ou use os dados de exemplo.")
+        st.stop()
 
-if __name__ == "__main__":
-    main()
+# Seção de visualização
+st.header("2. Visualizações")
+
+# Opções de visualização
+tipo_grafico = st.radio(
+    "Escolha o tipo de visualização:",
+    ["Distribuição Contínua (Histograma)", "Distribuição por Faixas Etárias (Barras)"]
+)
+
+if tipo_grafico == "Distribuição Contínua (Histograma)":
+    st.subheader("Distribuição Contínua de Idades")
+    fig = criar_grafico_distribuicao_idade(df)
+    
+    if fig:
+        st.pyplot(fig)
+        
+        # Opção para download do gráfico
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+        buf.seek(0)
+        
+        st.download_button(
+            label="📥 Download do Gráfico (PNG)",
+            data=buf,
+            file_name="distribuicao_idade_cbmpr.png",
+            mime="image/png"
+        )
+        
+        # Exibir estatísticas em colunas
+        st.subheader("Estatísticas")
+        
+        # Remover valores nulos
+        df_idade = df.dropna(subset=['Idade'])
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Idade Média", f"{df_idade['Idade'].mean():.1f} anos")
+        with col2:
+            st.metric("Idade Mediana", f"{df_idade['Idade'].median():.1f} anos")
+        with col3:
+            st.metric("Idade Mínima", f"{df_idade['Idade'].min():.0f} anos")
+        with col4:
+            st.metric("Idade Máxima", f"{df_idade['Idade'].max():.0f} anos")
+
+else:
+    st.subheader("Distribuição por Faixas Etárias")
+    fig = criar_grafico_faixas_etarias(df)
+    
+    if fig:
+        st.pyplot(fig)
+        
+        # Opção para download do gráfico
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+        buf.seek(0)
+        
+        st.download_button(
+            label="📥 Download do Gráfico (PNG)",
+            data=buf,
+            file_name="faixas_etarias_cbmpr.png",
+            mime="image/png"
+        )
+        
+        # Exibir tabela de faixas etárias
+        st.subheader("Tabela de Faixas Etárias")
+        
+        # Remover valores nulos
+        df_idade = df.dropna(subset=['Idade'])
+        
+        # Definir faixas etárias
+        bins = [18, 25, 30, 35, 40, 45, 50, 55, 60]
+        labels = ['18-25', '26-30', '31-35', '36-40', '41-45', '46-50', '51-55', '56+']
+        
+        # Categorizar idades
+        df_idade['Faixa Etária'] = pd.cut(df_idade['Idade'], bins=bins, labels=labels, right=True)
+        
+        # Contagem por faixa etária
+        contagem = df_idade['Faixa Etária'].value_counts().sort_index()
+        percentual = (contagem / contagem.sum() * 100).round(2)
+        
+        tabela_faixas = pd.DataFrame({
+            'Faixa Etária': contagem.index,
+            'Quantidade': contagem.values,
+            'Percentual (%)': percentual.values
+        })
+        
+        st.dataframe(tabela_faixas, use_container_width=True)
+
+# Rodapé
+st.markdown("---")
+st.markdown("**Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná**")
+st.markdown("💻 Para mais informações, consulte o repositório no GitHub")
