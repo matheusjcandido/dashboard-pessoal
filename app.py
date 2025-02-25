@@ -13,6 +13,46 @@ st.set_page_config(
     layout="wide"
 )
 
+# Definição de cores personalizadas do CBMPR
+cores_cbmpr = {
+    'azul_escuro': '#062733',
+    'vermelho': '#D34339',
+    'amarelo': '#FFD928',
+    'cinza_escuro': '#606062',
+    'cinza_claro': '#A39B96',
+    'branco': '#FEFEFE',
+    'preto': '#373435'
+}
+
+# CSS personalizado para a aplicação
+st.markdown(f"""
+<style>
+    .stApp {{
+        background-color: {cores_cbmpr['branco']};
+    }}
+    .stButton>button {{
+        background-color: {cores_cbmpr['azul_escuro']};
+        color: white;
+    }}
+    .stRadio label {{
+        color: {cores_cbmpr['preto']};
+    }}
+    h1, h2, h3 {{
+        color: {cores_cbmpr['azul_escuro']};
+    }}
+    .stMarkdown {{
+        color: {cores_cbmpr['preto']};
+    }}
+    .stAlert {{
+        background-color: {cores_cbmpr['cinza_claro']};
+        color: {cores_cbmpr['preto']};
+    }}
+    .stMetric label {{
+        color: {cores_cbmpr['azul_escuro']};
+    }}
+</style>
+""", unsafe_allow_html=True)
+
 # Função para processar o arquivo CSV
 def processar_arquivo_csv(uploaded_file):
     """
@@ -104,8 +144,8 @@ def criar_grafico_distribuicao_idade(df, filtro_abono=None):
     # Criar figura
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Histograma com KDE
-    sns.histplot(df_idade['Idade'], bins=40, kde=True, ax=ax, color='#1e3d59')
+    # Histograma com KDE usando a cor azul escuro do CBMPR
+    sns.histplot(df_idade['Idade'], bins=40, kde=True, ax=ax, color=cores_cbmpr['azul_escuro'])
     
     # Adicionar grade, títulos e ajustes visuais
     ax.grid(alpha=0.3)
@@ -124,9 +164,9 @@ def criar_grafico_distribuicao_idade(df, filtro_abono=None):
     min_idade = df_idade['Idade'].min()
     max_idade = df_idade['Idade'].max()
     
-    # Adicionar linhas de média e mediana
-    ax.axvline(media, color='red', linestyle='--', alpha=0.7, label=f'Média: {media:.1f} anos')
-    ax.axvline(mediana, color='green', linestyle='-.', alpha=0.7, label=f'Mediana: {mediana:.1f} anos')
+    # Adicionar linhas de média e mediana com cores do CBMPR
+    ax.axvline(media, color=cores_cbmpr['vermelho'], linestyle='--', alpha=0.7, label=f'Média: {media:.1f} anos')
+    ax.axvline(mediana, color=cores_cbmpr['amarelo'], linestyle='-.', alpha=0.7, label=f'Mediana: {mediana:.1f} anos')
     ax.legend()
     
     # Adicionar texto com estatísticas
@@ -139,7 +179,7 @@ def criar_grafico_distribuicao_idade(df, filtro_abono=None):
     
     ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
             verticalalignment='top', horizontalalignment='left',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
+            bbox=dict(boxstyle='round,pad=0.5', facecolor=cores_cbmpr['branco'], alpha=0.8))
     
     plt.tight_layout()
     return fig
@@ -169,11 +209,20 @@ def criar_grafico_faixas_etarias(df, filtro_abono=None):
     # Criar figura
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Cores para o gráfico de barras
-    cores = sns.color_palette("Blues_r", len(labels))
+    # Definir cores personalizadas para cada barra usando a paleta CBMPR
+    cores_barras = [
+        cores_cbmpr['azul_escuro'],
+        cores_cbmpr['vermelho'],
+        cores_cbmpr['amarelo'],
+        cores_cbmpr['cinza_escuro'],
+        cores_cbmpr['cinza_claro'],
+        cores_cbmpr['preto'],
+        cores_cbmpr['azul_escuro'],
+        cores_cbmpr['vermelho']
+    ]
     
     # Criar gráfico de barras
-    bars = ax.bar(contagem.index, contagem.values, color=cores)
+    bars = ax.bar(contagem.index, contagem.values, color=cores_barras[:len(contagem)])
     
     # Adicionar rótulos em cima das barras
     for bar in bars:
@@ -220,12 +269,11 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     # Contagem por cargo
     contagem_cargo = df_cargo['Cargo'].value_counts()
     
-    # Ordenar os cargos conforme hierarquia militar específica solicitada
+    # Ordenar os cargos conforme hierarquia militar específica solicitada (INVERSA da original)
     hierarquia = [
-        'Soldado 2ª Classe', 'Soldado 1ª Classe', 'Cabo', '3º Sargento', '2º Sargento', 
-        '1º Sargento', 'Subtenente', 'Aluno de 1º Ano', 'Aluno de 2º Ano', 'Aluno de 3º Ano', 
-        'Aspirante a Oficial', '2º Tenente 6', '2º Tenente', '1º Tenente', 'Capitão', 'Major', 
-        'Tenente Coronel', 'Coronel'
+        'Coronel', 'Tenente Coronel', 'Major', 'Capitão', '1º Tenente', '2º Tenente', '2º Tenente 6',
+        'Aspirante a Oficial', 'Aluno de 3º Ano', 'Aluno de 2º Ano', 'Aluno de 1º Ano', 'Subtenente', 
+        '1º Sargento', '2º Sargento', '3º Sargento', 'Cabo', 'Soldado 1ª Classe', 'Soldado 2ª Classe'
     ]
     
     # Filtrar e reordenar os cargos encontrados conforme a hierarquia
@@ -249,9 +297,21 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     # Criar figura - garantindo espaço suficiente para os nomes dos cargos
     fig, ax = plt.subplots(figsize=(14, 10))
     
-    # Criar gráfico de barras horizontais
-    cores = sns.color_palette("viridis", len(contagem_cargo))
-    bars = ax.barh(contagem_cargo.index, contagem_cargo.values, color=cores)
+    # Definir cores personalizadas com base na imagem fornecida
+    # Azul escuro, vermelho, amarelo, cinza escuro, cinza claro, branco, preto
+    cores_cbmpr = ['#062733', '#D34339', '#FFD928', '#606062', '#A39B96', '#FEFEFE', '#373435']
+    
+    # Criar um mapeamento de cores para cada posto/graduação
+    n_cargos = len(contagem_cargo)
+    cores_mapeadas = []
+    
+    # Distribuir as cores entre os cargos, repetindo se necessário
+    for i in range(n_cargos):
+        cor_idx = i % len(cores_cbmpr)
+        cores_mapeadas.append(cores_cbmpr[cor_idx])
+    
+    # Criar gráfico de barras horizontais com as cores personalizadas
+    bars = ax.barh(contagem_cargo.index, contagem_cargo.values, color=cores_mapeadas)
     
     # Adicionar rótulos nas barras
     for bar in bars:
@@ -282,9 +342,6 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
     # Adicionar grade apenas no eixo x
     ax.grid(axis='x', alpha=0.3)
     ax.set_axisbelow(True)
-    
-    # Inverter o eixo y para que a hierarquia superior fique no topo
-    ax.invert_yaxis()
     
     plt.tight_layout()
     return fig
@@ -396,7 +453,7 @@ if usar_dados_teste:
     st.markdown(
         f"""
         <div style="
-            background-color: #FF4500;
+            background-color: {cores_cbmpr['vermelho']};
             padding: 20px;
             border-radius: 10px;
             text-align: center;
@@ -428,7 +485,7 @@ else:
                 st.markdown(
                     f"""
                     <div style="
-                        background-color: #FF4500;
+                        background-color: {cores_cbmpr['vermelho']};
                         padding: 20px;
                         border-radius: 10px;
                         text-align: center;
@@ -624,5 +681,18 @@ else:  # Distribuição por Posto/Graduação
 
 # Rodapé
 st.markdown("---")
-st.markdown("**Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná**")
-st.markdown("💻 Para mais informações, consulte o repositório no GitHub")
+st.markdown(
+    f"""
+    <div style="
+        background-color: {cores_cbmpr['cinza_escuro']};
+        padding: 15px;
+        border-radius: 5px;
+        color: white;
+        text-align: center;
+    ">
+        <p><strong>Dashboard desenvolvido para o Corpo de Bombeiros Militar do Paraná</strong></p>
+        <p>💻 Para mais informações, consulte o repositório no GitHub</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
