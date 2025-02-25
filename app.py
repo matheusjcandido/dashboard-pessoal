@@ -1,4 +1,17 @@
-import streamlit as st
+# Se houver filtro de abono, mostrar estatísticas específicas
+if tem_coluna_abono:
+    total = len(df_filtrado)
+    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
+    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
+    
+    st.subheader("Estatísticas de Abono Permanência")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total com Filtros", f"{total}")
+    with col2:
+        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
+    with col3:
+        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -769,59 +782,13 @@ with col1:
 with col2:
     st.metric("Total após filtros", f"{total_filtrado} ({total_filtrado/total_original*100:.1f}%)")
 
-# Se houver filtro de abono, mostrar estatísticas específicas
-if tem_coluna_abono:
-    total = len(df_filtrado)
-    recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'S'])
-    nao_recebe = len(df_filtrado[df_filtrado['Recebe Abono Permanência'] == 'N'])
+# Adicionar estatísticas de idade
+if 'Idade' in df_filtrado.columns:
+    # Remover valores nulos para cálculos
+    df_idade = df_filtrado.dropna(subset=['Idade'])
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total com Filtros", f"{total}")
-    with col2:
-        st.metric("Recebem Abono", f"{recebe} ({recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
-    with col3:
-        st.metric("Não Recebem Abono", f"{nao_recebe} ({nao_recebe/total*100:.1f}% do filtrado)" if total > 0 else "0 (0%)")
-
-# Seção de visualização
-st.header("3. Visualizações")
-
-# Opções de visualização
-tipo_grafico = st.radio(
-    "Escolha o tipo de visualização:",
-    ["Distribuição por Idade (Histograma)", 
-     "Distribuição por Faixas Etárias", 
-     "Distribuição por Posto/Graduação",
-     "Distribuição por Unidade de Trabalho"]
-)
-
-# Nota: A partir daqui, usamos df_filtrado em vez de df para visualizações
-if tipo_grafico == "Distribuição por Idade (Histograma)":
-    st.subheader("Distribuição de Idades")
-    # Criar gráfico usando o dataframe já filtrado
-    fig = criar_grafico_distribuicao_idade(df_filtrado, None)  # Filtro de abono já aplicado no df_filtrado
-    
-    if fig:
-        st.pyplot(fig)
-        
-        # Opção para download do gráfico
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        
-        st.download_button(
-            label="📥 Download do Gráfico (PNG)",
-            data=buf,
-            file_name="distribuicao_idade_cbmpr.png",
-            mime="image/png"
-        )
-        
-        # Exibir estatísticas em colunas
-        st.subheader("Estatísticas")
-        
-        # Remover valores nulos 
-        df_idade = df_filtrado.dropna(subset=['Idade'])
-        
+    if len(df_idade) > 0:  # Verificar se há dados após filtro
+        st.subheader("Estatísticas de Idade")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Idade Média", f"{df_idade['Idade'].mean():.1f} anos")
@@ -831,7 +798,11 @@ if tipo_grafico == "Distribuição por Idade (Histograma)":
             st.metric("Idade Mínima", f"{df_idade['Idade'].min():.0f} anos")
         with col4:
             st.metric("Idade Máxima", f"{df_idade['Idade'].max():.0f} anos")
-        
+
+# Adicionar opção para download das estatísticas gerais
+if 'Idade' in df_filtrado.columns:
+    df_idade = df_filtrado.dropna(subset=['Idade'])
+    if len(df_idade) > 0:
         # Tabela de estatísticas para download
         estatisticas = pd.DataFrame({
             'Estatística': ['Média', 'Mediana', 'Mínima', 'Máxima', 'Total de Militares'],
@@ -848,14 +819,23 @@ if tipo_grafico == "Distribuição por Idade (Histograma)":
         st.download_button(
             label="📥 Download das Estatísticas (CSV)",
             data=csv_estatisticas,
-            file_name="estatisticas_idade_cbmpr.csv",
+            file_name="estatisticas_gerais_cbmpr.csv",
             mime="text/csv"
         )
-        
-        # Adicionar seção de amostra de dados após as visualizações e análises
-        adicionar_secao_amostra_dados(df_filtrado, None)  # Filtro já aplicado
 
-elif tipo_grafico == "Distribuição por Faixas Etárias":
+# Seção de visualização
+st.header("3. Visualizações")
+
+# Opções de visualização
+tipo_grafico = st.radio(
+    "Escolha o tipo de visualização:",
+    ["Distribuição por Faixas Etárias", 
+     "Distribuição por Posto/Graduação",
+     "Distribuição por Unidade de Trabalho"]
+)
+
+# Nota: A partir daqui, usamos df_filtrado em vez de df para visualizações
+if tipo_grafico == "Distribuição por Faixas Etárias":
     st.subheader("Distribuição por Faixas Etárias")
     # Usar dataframe já filtrado
     fig = criar_grafico_faixas_etarias(df_filtrado, None)  # Filtro já aplicado
