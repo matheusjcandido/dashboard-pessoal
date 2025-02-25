@@ -501,6 +501,12 @@ def criar_grafico_distribuicao_cargo(df, filtro_abono=None):
 # Interface principal do Streamlit
 st.title("🚒 Dashboard - Corpo de Bombeiros Militar do Paraná")
 
+# Inicializar session_state para gerenciar o estado da aplicação
+if 'filtros_cargo' not in st.session_state:
+    st.session_state.filtros_cargo = []
+if 'filtros_unidade' not in st.session_state:
+    st.session_state.filtros_unidade = []
+
 st.markdown("""
 Este dashboard apresenta visualizações sobre os dados de pessoal do Corpo de Bombeiros Militar do Paraná.
 Faça o upload do arquivo CSV gerado pela SEAP para visualizar os gráficos.
@@ -741,14 +747,26 @@ with tab_cargo:
             if cargo not in cargos_ordenados:
                 cargos_ordenados.append(cargo)
         
+        # Inicializar o estado dos filtros de cargo se ainda não existir
+        if 'filtros_cargo' not in st.session_state:
+            st.session_state.filtros_cargo = cargos_ordenados.copy()
+        
+        # Função para selecionar todos os cargos
+        def selecionar_todos_cargos():
+            st.session_state.filtros_cargo = cargos_ordenados.copy()
+        
+        # Função para limpar todos os cargos
+        def limpar_cargos():
+            st.session_state.filtros_cargo = []
+        
         # Opção para selecionar todos ou nenhum
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Selecionar Todos (Posto/Grad)"):
-                filtros_cargo = cargos_ordenados
+            if st.button("Selecionar Todos (Posto/Grad)", on_click=selecionar_todos_cargos):
+                pass
         with col2:
-            if st.button("Limpar Postos/Grad"):
-                filtros_cargo = []
+            if st.button("Limpar Postos/Grad", on_click=limpar_cargos):
+                pass
         
         # Verificar se há muitos cargos e criar selectbox com multiselect ou usar checkboxes
         if len(cargos_ordenados) > 10:
@@ -756,8 +774,11 @@ with tab_cargo:
             filtros_cargo = st.multiselect(
                 "Selecione os Postos/Graduações:",
                 options=cargos_ordenados,
-                default=cargos_ordenados  # Inicialmente todos selecionados
+                default=st.session_state.filtros_cargo,
+                key="multiselect_cargos"
             )
+            # Atualizar o estado com a seleção atual
+            st.session_state.filtros_cargo = filtros_cargo
         else:
             # Para poucos cargos, usar checkboxes
             st.write("Selecione os Postos/Graduações:")
@@ -767,8 +788,13 @@ with tab_cargo:
             for i, cargo in enumerate(cargos_ordenados):
                 col_idx = i % 2
                 with cols[col_idx]:
-                    if st.checkbox(cargo, value=True):
+                    # Determinar se o checkbox deve estar marcado com base no estado
+                    valor_padrao = cargo in st.session_state.filtros_cargo
+                    if st.checkbox(cargo, value=valor_padrao, key=f"cargo_{i}"):
                         filtros_cargo.append(cargo)
+            
+            # Atualizar o estado com a seleção atual
+            st.session_state.filtros_cargo = filtros_cargo
     else:
         st.warning("Coluna 'Cargo' não encontrada no arquivo. O filtro por Posto/Graduação não está disponível.")
         filtros_cargo = []
@@ -786,21 +812,37 @@ with tab_unidade:
         # Obter lista única de unidades e ordená-las alfabeticamente
         unidades = sorted(df[coluna_unidade].unique())
         
+        # Inicializar o estado dos filtros de unidade se ainda não existir
+        if 'filtros_unidade' not in st.session_state:
+            st.session_state.filtros_unidade = unidades.copy()
+        
+        # Função para selecionar todas as unidades
+        def selecionar_todas_unidades():
+            st.session_state.filtros_unidade = unidades.copy()
+        
+        # Função para limpar todas as unidades
+        def limpar_unidades():
+            st.session_state.filtros_unidade = []
+        
         # Opção para selecionar todos ou nenhum
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Selecionar Todas (Unidades)"):
-                filtros_unidade = unidades
+            if st.button("Selecionar Todas (Unidades)", on_click=selecionar_todas_unidades):
+                pass
         with col2:
-            if st.button("Limpar Unidades"):
-                filtros_unidade = []
+            if st.button("Limpar Unidades", on_click=limpar_unidades):
+                pass
         
         # Usar multiselect para unidades
         filtros_unidade = st.multiselect(
             "Selecione as Unidades de Trabalho:",
             options=unidades,
-            default=unidades  # Inicialmente todas selecionadas
+            default=st.session_state.filtros_unidade,
+            key="multiselect_unidades"
         )
+        
+        # Atualizar o estado com a seleção atual
+        st.session_state.filtros_unidade = filtros_unidade
     else:
         st.warning("Coluna de Unidade de Trabalho não encontrada no arquivo. O filtro não está disponível.")
         filtros_unidade = []
