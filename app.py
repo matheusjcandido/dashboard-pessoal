@@ -76,93 +76,128 @@ def aplicar_css():
 @st.cache_data
 def carregar_dados(arquivo):
     try:
-        # Ler primeiras linhas para identificar a estrutura do arquivo
-        primeiras_linhas = pd.read_csv(arquivo, encoding='cp1252', nrows=20)
+        # Primeiro, vamos tentar ler o arquivo como texto para identificar possíveis problemas
+        conteudo_arquivo = arquivo.read()
+        arquivo.seek(0)  # Resetar o ponteiro do arquivo
         
-        # Identificar quantas linhas pular (metadata)
-        skiprows = 0
-        for i in range(min(10, len(primeiras_linhas))):
-            if "ID" in str(primeiras_linhas.iloc[i].values) and "Nome" in str(primeiras_linhas.iloc[i].values) and "Idade" in str(primeiras_linhas.iloc[i].values):
-                skiprows = i
-                break
+        # Tentativa de determinar o delimiter
+        # Vamos ler as primeiras linhas e verificar se há mais vírgulas ou ponto-e-vírgulas
+        import io
+        amostra = conteudo_arquivo[:2000].decode('cp1252', errors='replace')
+        virgulas = amostra.count(',')
+        pontovirgulas = amostra.count(';')
+        tabs = amostra.count('\t')
         
-        # Lê o arquivo CSV, pulando as linhas de metadados identificadas
-        df = pd.read_csv(arquivo, encoding='cp1252', skiprows=skiprows)
+        # Determinar qual delimitador usar
+        if pontovirgulas > virgulas and pontovirgulas > tabs:
+            delimitador = ';'
+        elif tabs > virgulas and tabs > pontovirgulas:
+            delimitador = '\t'
+        else:
+            delimitador = ','
+            
+        st.sidebar.info(f"Delimitador detectado: {delimitador}")
         
-        # Se a primeira linha estiver vazia ou for cabeçalho repetido, remover
-        if df.iloc[0].isna().all() or "ID" in str(df.iloc[0].values):
-            df = df.iloc[1:].reset_index(drop=True)
+        # Tentativa com engine python para maior flexibilidade
+        df = pd.read_csv(
+            io.StringIO(conteudo_arquivo.decode('cp1252', errors='replace')),
+            delimiter=delimitador,
+            engine='python',  # Engine mais tolerante a erros
+            on_bad_lines='skip',  # Pular linhas com problemas
+            quoting=3,  # QUOTE_NONE - não considerar aspas como delimitadores especiais
+            dtype=str,  # Tratar TODAS as colunas como string inicialmente
+            skiprows=range(7)  # Pular as linhas de metadados
+        )
         
-        # Remover todas as linhas vazias
+        # Remover linhas vazias
         df = df.dropna(how='all')
         
-        # Identificar colunas para exclusão
+        # Identificar colunas relevantes
+        # Para encontrar a coluna de cabeçalho, buscar padrões específicos
+        cabecalho_detectado = False
+        for i, row in df.iterrows():
+            # Verificar se esta linha parece um cabeçalho (contém palavras-chave esperadas)
+            if any(col for col in row if isinstance(col, str) and ('ID' in col or 'Nome' in col)):
+                # Usar esta linha como cabeçalho
+                cabecalho = row.values
+                df = df.iloc[i+1:].reset_index(drop=True)  # Pegar dados a partir da próxima linha
+                # Atribuir novos nomes às colunas
+                df.columns = cabecalho
+                cabecalho_detectado = True
+                break
+        
+        if not cabecalho_detectado:
+            st.warning("Cabeçalho não detectado automaticamente. Usando a primeira linha de dados.")
+        
+        # Limpar nomes das colunas
+        df.columns = [col.strip() if isinstance(col, str) else f"Col_{i}" for i, col in enumerate(df.columns)]
+        
+        # Remover colunas que não interessam (usando verificação por substring para maior flexibilidade)
         colunas_excluir = []
-        
-        # Procura pelos nomes de colunas independente de acentuação
         for col in df.columns:
-            for exclude_term in ['rgao', 'Fun', 'Espec', 'Tipo Empregado', 'Tipo Provimento', 
-                               'Categoria', 'Regime Trab', 'Regime Prev', 'Segrega', 'RGPS', 'UF-Cidade', 'Unnamed']:
-                if exclude_term.lower() in col.lower() or col.strip() == '':
-                    colunas_excluir.append(col)
-                    break
+            if any(termo in col.lower() if isinstance(col, str) else False for termo in 
+                  ['rgao', 'func', 'espec', 'empregado', 'provimento', 'categoria', 'trabalhista', 
+                   'previdenci', 'segrega', 'rgps', 'cidade', 'unnamed']):
+                colunas_excluir.append(col)
         
-        # Excluir colunas
+        # Excluir colunas identificadas e colunas vazias
         df = df.drop(columns=[col for col in colunas_excluir if col in df.columns])
         
-        # Limpeza dos dados
-        # Verificar se a coluna Idade existe
-        idade_col = [col for col in df.columns if 'idade' in col.lower()]
-        if idade_col:
-            idade_col = idade_col[0]
-            
-            # Limpar a coluna de idade (remover espaços e caracteres não numéricos)
-            df[idade_col] = df[idade_col].astype(str).str.strip()
-            df[idade_col] = df[idade_col].str.extract('(\d+)', expand=False)
-            
-            # Converter para numérico
-            df[idade_col] = pd.to_numeric(df[idade_col], errors='coerce')
-            
-            # Renomear para 'Idade' se necessário
-            if idade_col != 'Idade':
-                df = df.rename(columns={idade_col: 'Idade'})
+        # Remover colunas sem cabeçalho ou com cabeçalho em branco
+        colunas_sem_nome = [col for col in df.columns if not isinstance(col, str) or col.strip() == '']
+        if colunas_sem_nome:
+            df = df.drop(columns=colunas_sem_nome)
+        
+        # Identificar e renomear colunas importantes
+        nome_col_idade = None
+        nome_col_cargo = None
+        nome_col_unidade = None
+        nome_col_abono = None
+        
+        for col in df.columns:
+            if isinstance(col, str):
+                col_lower = col.lower()
+                if 'idade' in col_lower:
+                    nome_col_idade = col
+                elif 'cargo' in col_lower or 'posto' in col_lower or 'gradua' in col_lower:
+                    nome_col_cargo = col
+                elif 'unidade' in col_lower and 'trabalho' in col_lower:
+                    nome_col_unidade = col
+                elif 'abono' in col_lower or 'perman' in col_lower:
+                    nome_col_abono = col
+        
+        # Garantir que as colunas necessárias existam
+        if nome_col_idade:
+            # Converter idade para numérico preservando só os dígitos
+            df['Idade'] = df[nome_col_idade].str.extract('(\d+)', expand=False)
+            df['Idade'] = pd.to_numeric(df['Idade'], errors='coerce')
+            if nome_col_idade != 'Idade':
+                df = df.drop(columns=[nome_col_idade])
         else:
-            # Se não encontrar coluna de idade, criar uma coluna vazia
             df['Idade'] = np.nan
             st.warning("Coluna de idade não encontrada no arquivo")
         
-        # Verificar se a coluna Cargo existe
-        cargo_col = [col for col in df.columns if 'cargo' in col.lower()]
-        if cargo_col:
-            cargo_col = cargo_col[0]
-            # Renomear para 'Cargo' se necessário
-            if cargo_col != 'Cargo':
-                df = df.rename(columns={cargo_col: 'Cargo'})
+        if nome_col_cargo:
+            df = df.rename(columns={nome_col_cargo: 'Cargo'})
         else:
-            # Se não encontrar coluna de cargo, criar uma coluna vazia
             df['Cargo'] = "Não informado"
             st.warning("Coluna de cargo não encontrada no arquivo")
         
-        # Verificar coluna abono
-        abono_col = [col for col in df.columns if 'abono' in col.lower() or 'perman' in col.lower()]
-        if abono_col:
-            abono_col = abono_col[0]
-            # Renomear para padrão
-            df = df.rename(columns={abono_col: 'Recebe Abono Permanência'})
+        if nome_col_unidade:
+            df = df.rename(columns={nome_col_unidade: 'Descrição da Unidade de Trabalho'})
+        else:
+            df['Descrição da Unidade de Trabalho'] = "Não informado"
+            st.warning("Coluna de unidade de trabalho não encontrada no arquivo")
+        
+        if nome_col_abono:
+            df = df.rename(columns={nome_col_abono: 'Recebe Abono Permanência'})
         else:
             df['Recebe Abono Permanência'] = "N"
             st.warning("Coluna de abono permanência não encontrada no arquivo")
         
-        # Verificar coluna unidade
-        unidade_col = [col for col in df.columns if 'unidade' in col.lower() and 'trabalho' in col.lower()]
-        if unidade_col:
-            unidade_col = unidade_col[0]
-            # Renomear para padrão
-            df = df.rename(columns={unidade_col: 'Descrição da Unidade de Trabalho'})
-        else:
-            df['Descrição da Unidade de Trabalho'] = "Não informado"
-            st.warning("Coluna de unidade de trabalho não encontrada no arquivo")
-            
+        # Não converter datas - deixar como string conforme solicitado
+        # Tratar colunas de data (Data Nascimento) como string sem conversão
+        
         # Ordenar hierarquia militar corretamente
         hierarquia = {
             "Coronel": 1, 
@@ -186,16 +221,14 @@ def carregar_dados(arquivo):
         }
         
         # Adicionar coluna de ordem hierárquica
-        df['Ordem_Hierarquica'] = df['Cargo'].map(hierarquia)
-        # Para cargos não encontrados na hierarquia, atribuir valor alto
-        df['Ordem_Hierarquica'] = df['Ordem_Hierarquica'].fillna(999)
+        df['Ordem_Hierarquica'] = df['Cargo'].map(lambda x: hierarquia.get(x, 999) if pd.notnull(x) else 999)
         
         # Exibir informações sobre a importação
         st.sidebar.success(f"Dados carregados com sucesso: {len(df)} registros")
         
         return df
     except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
+        st.error(f"Erro ao carregar dados: {str(e)}")
         st.error("Detalhes do erro: Verifique se o arquivo está no formato correto.")
         return pd.DataFrame()
 
@@ -494,18 +527,21 @@ def main():
         - Filtros por cargo, unidade de trabalho e abono permanência
         - Tabela interativa com opção de download
         
-        ### Estrutura Esperada do Arquivo:
-        O arquivo deve conter informações sobre o efetivo, incluindo colunas para:
-        - Nome
-        - Idade
-        - Cargo (Posto/Graduação)
-        - Unidade de Trabalho
-        - Abono Permanência
+        ### Solução de Problemas Comuns:
         
-        ### Solução de Problemas:
-        - Se houver erro de carregamento, verifique se o arquivo está no formato correto
-        - Confira se a codificação do arquivo é compatível (cp1252/Windows-1252)
-        - Verifique se as colunas necessárias estão presentes no arquivo
+        #### Erro "Expected 1 fields in line X, saw Y"
+        Este erro ocorre quando o delimitador no arquivo CSV não é consistente. Você pode:
+        - Verificar o delimitador usado (vírgula, ponto-e-vírgula, tab)
+        - Abrir o arquivo em um editor de texto e verificar a linha problemática
+        - Salvar o arquivo garantindo o mesmo delimitador em todas as linhas
+        
+        #### Problema com codificação de caracteres
+        Se os acentos e caracteres especiais aparecerem incorretamente:
+        - Salve o arquivo com codificação Windows-1252 (CP1252)
+        - Tente converter o arquivo para UTF-8 usando um editor de texto
+        
+        #### Problema com formato de dados
+        O sistema trata automaticamente datas como texto. Não é necessário fazer conversões.
         """)
         
         # Adicionar exemplo de formato esperado
@@ -514,15 +550,47 @@ def main():
             O arquivo CSV deve ter um formato similar a este:
             
             ```
-            ID,Nome,RG,CPF,Data Nascimento,Idade,Órgão,Código da Unidade de Trabalho,Descrição da Unidade de Trabalho,Cargo,Recebe Abono Permanência
-            12345,JOÃO DA SILVA,1234567,123.456.789-00,01/01/1980,45,SESP,W9600123,1GB 1SGB 1SEC BM,Coronel,S
-            67890,MARIA SANTOS,7654321,987.654.321-00,15/05/1990,35,SESP,W9600456,3GB 1SGB 1SEC BM,Capitão,N
+            ID,Nome,RG,CPF,Data Nascimento,Idade,Descrição da Unidade de Trabalho,Cargo,Recebe Abono Permanência
+            12345,JOÃO DA SILVA,1234567,123.456.789-00,01/01/1980,45,1GB 1SGB 1SEC BM,Coronel,S
+            67890,MARIA SANTOS,7654321,987.654.321-00,15/05/1990,35,3GB 1SGB 1SEC BM,Capitão,N
             ```
             
-            Observações:
-            - O arquivo pode conter cabeçalhos e metadados nas primeiras linhas
-            - O sistema tentará identificar automaticamente as colunas relevantes
-            - Colunas adicionais serão ignoradas
+            **Dicas para preparar o arquivo:**
+            
+            1. Verifique se todas as linhas têm o mesmo número de campos
+            2. Certifique-se de que o delimitador seja consistente (vírgula, ponto-e-vírgula ou tab)
+            3. Se abrir no Excel:
+               - Salve como CSV (Separado por vírgulas)
+               - Ou use "Salvar como" e selecione CSV (MS-DOS)
+            """)
+        
+        # Informações para usuários técnicos
+        with st.expander("Informações Técnicas para Resolução de Problemas"):
+            st.markdown("""
+            ### Resolução de Problemas Técnicos
+            
+            #### Para problemas de delimitação:
+            ```python
+            # Se o arquivo usa ponto-e-vírgula como delimitador:
+            df = pd.read_csv('seu_arquivo.csv', delimiter=';', encoding='cp1252')
+            
+            # Se o arquivo usa tab como delimitador:
+            df = pd.read_csv('seu_arquivo.csv', delimiter='\\t', encoding='cp1252')
+            ```
+            
+            #### Para problemas com linhas de metadados:
+            ```python
+            # Pular as primeiras X linhas:
+            df = pd.read_csv('seu_arquivo.csv', skiprows=X, encoding='cp1252')
+            ```
+            
+            #### Para problemas com linhas mal formadas:
+            ```python
+            # Ignorar linhas com problemas:
+            df = pd.read_csv('seu_arquivo.csv', on_bad_lines='skip', encoding='cp1252')
+            ```
+            
+            O dashboard tenta automaticamente detectar o delimitador correto e ignorar linhas problemáticas.
             """)
         
         # Footer com informações
